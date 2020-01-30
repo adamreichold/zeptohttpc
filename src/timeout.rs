@@ -37,7 +37,7 @@ impl Timeout {
         Ok(Self(tx))
     }
 
-    pub fn read<R: Read>(&self, mut reader: R, buf: &mut [u8]) -> IoResult<usize> {
+    pub fn read<R: Read>(&self, reader: &mut R, buf: &mut [u8]) -> IoResult<usize> {
         let read = reader.read(buf)?;
 
         if read == 0 && !buf.is_empty() && self.0.send(()).is_err() {

@@ -11,13 +11,23 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#[cfg(feature = "tls")]
+use std::io::ErrorKind::{ConnectionAborted, WouldBlock};
 use std::io::{Read, Result as IoResult, Write};
 use std::net::TcpStream;
+#[cfg(feature = "tls")]
+use std::sync::Arc;
 
-#[cfg(feature = "native-tls")]
+#[cfg(any(feature = "native-tls", feature = "tls"))]
 use http::uri::Scheme;
 #[cfg(feature = "native-tls")]
 use native_tls::{HandshakeError, TlsConnector, TlsStream};
+#[cfg(feature = "tls")]
+use rustls::{ClientConfig, ClientSession, Session, StreamOwned};
+#[cfg(feature = "tls")]
+use webpki::DNSNameRef;
+#[cfg(feature = "tls")]
+use webpki_roots::TLS_SERVER_ROOTS;
 
 use super::{happy_eyeballs::connect, timeout::Timeout, Error, Options};
 
@@ -25,14 +35,18 @@ pub enum Stream {
     Tcp(TcpStream),
     TcpWithTimeout(TcpStream, Timeout),
     #[cfg(feature = "native-tls")]
-    Tls(TlsStream<TcpStream>),
+    NativeTls(TlsStream<TcpStream>),
     #[cfg(feature = "native-tls")]
-    TlsWithTimeout(TlsStream<TcpStream>, Timeout),
+    NativeTlsWithTimeout(TlsStream<TcpStream>, Timeout),
+    #[cfg(feature = "tls")]
+    Rustls(Box<StreamOwned<ClientSession, TcpStream>>),
+    #[cfg(feature = "tls")]
+    RustlsWithTimeout(Box<StreamOwned<ClientSession, TcpStream>>, Timeout),
 }
 
 impl Stream {
     pub fn new(
-        #[cfg(feature = "native-tls")] scheme: &Scheme,
+        #[cfg(any(feature = "native-tls", feature = "tls"))] scheme: &Scheme,
         host: &str,
         port: u16,
         opts: &Options,
@@ -42,17 +56,30 @@ impl Stream {
         match opts.timeout {
             #[cfg(feature = "native-tls")]
             None if scheme == &Scheme::HTTPS => {
-                let stream = perform_handshake(stream, host, &opts.tls_connector)?;
+                let stream = perform_native_tls_handshake(stream, host, &opts.tls_connector)?;
 
-                Ok(Self::Tls(stream))
+                Ok(Self::NativeTls(stream))
+            }
+            #[cfg(feature = "tls")]
+            None if scheme == &Scheme::HTTPS => {
+                let stream = perform_rustls_handshake(stream, host, &opts.client_config)?;
+
+                Ok(Self::Rustls(Box::new(stream)))
             }
             None => Ok(Self::Tcp(stream)),
             #[cfg(feature = "native-tls")]
             Some(timeout) if scheme == &Scheme::HTTPS => {
                 let timeout = Timeout::start(&stream, timeout)?;
-                let stream = perform_handshake(stream, host, &opts.tls_connector)?;
+                let stream = perform_native_tls_handshake(stream, host, &opts.tls_connector)?;
 
-                Ok(Self::TlsWithTimeout(stream, timeout))
+                Ok(Self::NativeTlsWithTimeout(stream, timeout))
+            }
+            #[cfg(feature = "tls")]
+            Some(timeout) if scheme == &Scheme::HTTPS => {
+                let timeout = Timeout::start(&stream, timeout)?;
+                let stream = perform_rustls_handshake(stream, host, &opts.client_config)?;
+
+                Ok(Self::RustlsWithTimeout(Box::new(stream), timeout))
             }
             Some(timeout) => {
                 let timeout = Timeout::start(&stream, timeout)?;
@@ -64,7 +91,7 @@ impl Stream {
 }
 
 #[cfg(feature = "native-tls")]
-fn perform_handshake(
+fn perform_native_tls_handshake(
     stream: TcpStream,
     host: &str,
     connector: &Option<TlsConnector>,
@@ -87,15 +114,55 @@ fn perform_handshake(
     }
 }
 
+#[cfg(feature = "tls")]
+fn perform_rustls_handshake(
+    mut stream: TcpStream,
+    host: &str,
+    client_config: &Option<Arc<ClientConfig>>,
+) -> Result<StreamOwned<ClientSession, TcpStream>, Error> {
+    let name = DNSNameRef::try_from_ascii_str(host)?;
+
+    let mut session = match client_config {
+        Some(client_config) => ClientSession::new(client_config, name),
+        None => {
+            let mut client_config = ClientConfig::new();
+
+            client_config
+                .root_store
+                .add_server_trust_anchors(&TLS_SERVER_ROOTS);
+
+            ClientSession::new(&Arc::new(client_config), name)
+        }
+    };
+
+    while let Err(err) = session.complete_io(&mut stream) {
+        if err.kind() != WouldBlock || !session.is_handshaking() {
+            return Err(err.into());
+        }
+    }
+
+    Ok(StreamOwned::new(session, stream))
+}
+
 impl Read for Stream {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         match self {
             Self::Tcp(stream) => stream.read(buf),
             Self::TcpWithTimeout(stream, timeout) => timeout.read(stream, buf),
             #[cfg(feature = "native-tls")]
-            Self::Tls(stream) => stream.read(buf),
+            Self::NativeTls(stream) => stream.read(buf),
             #[cfg(feature = "native-tls")]
-            Self::TlsWithTimeout(stream, timeout) => timeout.read(stream, buf),
+            Self::NativeTlsWithTimeout(stream, timeout) => timeout.read(stream, buf),
+            #[cfg(feature = "tls")]
+            Self::Rustls(stream) => {
+                let res = stream.read(buf);
+                handle_close_notify(res, stream)
+            }
+            #[cfg(feature = "tls")]
+            Self::RustlsWithTimeout(stream, timeout) => {
+                let res = timeout.read(stream, buf);
+                handle_close_notify(res, stream)
+            }
         }
     }
 }
@@ -105,7 +172,9 @@ impl Write for Stream {
         match self {
             Self::Tcp(stream) | Self::TcpWithTimeout(stream, _) => stream.write(buf),
             #[cfg(feature = "native-tls")]
-            Self::Tls(stream) | Self::TlsWithTimeout(stream, _) => stream.write(buf),
+            Self::NativeTls(stream) | Self::NativeTlsWithTimeout(stream, _) => stream.write(buf),
+            #[cfg(feature = "tls")]
+            Self::Rustls(stream) | Self::RustlsWithTimeout(stream, _) => stream.write(buf),
         }
     }
 
@@ -113,7 +182,25 @@ impl Write for Stream {
         match self {
             Self::Tcp(stream) | Self::TcpWithTimeout(stream, _) => stream.flush(),
             #[cfg(feature = "native-tls")]
-            Self::Tls(stream) | Self::TlsWithTimeout(stream, _) => stream.flush(),
+            Self::NativeTls(stream) | Self::NativeTlsWithTimeout(stream, _) => stream.flush(),
+            #[cfg(feature = "tls")]
+            Self::Rustls(stream) | Self::RustlsWithTimeout(stream, _) => stream.flush(),
         }
+    }
+}
+
+#[cfg(feature = "tls")]
+fn handle_close_notify(
+    res: IoResult<usize>,
+    stream: &mut StreamOwned<ClientSession, TcpStream>,
+) -> IoResult<usize> {
+    match res {
+        Err(err) if err.kind() == ConnectionAborted => {
+            stream.sess.send_close_notify();
+            stream.sess.complete_io(&mut stream.sock)?;
+
+            Ok(0)
+        }
+        res => res,
     }
 }

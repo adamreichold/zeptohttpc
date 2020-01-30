@@ -24,10 +24,16 @@ pub use http;
 pub use httparse;
 #[cfg(feature = "native-tls")]
 pub use native_tls;
+#[cfg(feature = "tls")]
+pub use rustls;
 #[cfg(feature = "json")]
 pub use serde;
 #[cfg(feature = "json")]
 pub use serde_json;
+#[cfg(feature = "tls")]
+pub use webpki;
+#[cfg(feature = "tls")]
+pub use webpki_roots;
 
 pub use body_reader::BodyReader;
 pub use body_writer::{BodyKind, BodyWriter};
@@ -35,6 +41,8 @@ pub use error::Error;
 
 use std::convert::{TryFrom, TryInto};
 use std::io::{BufReader, BufWriter, Read, Result as IoResult, Seek, Write};
+#[cfg(feature = "tls")]
+use std::sync::Arc;
 use std::time::Duration;
 
 use http::{
@@ -54,6 +62,8 @@ use httparse::{
 };
 #[cfg(feature = "native-tls")]
 use native_tls::TlsConnector;
+#[cfg(feature = "tls")]
+use rustls::ClientConfig;
 #[cfg(feature = "json")]
 use serde::{de::DeserializeOwned, ser::Serialize};
 
@@ -131,6 +141,8 @@ pub struct Options {
     pub follow_redirects: Option<usize>,
     #[cfg(feature = "native-tls")]
     pub tls_connector: Option<TlsConnector>,
+    #[cfg(feature = "tls")]
+    pub client_config: Option<Arc<ClientConfig>>,
 }
 
 impl Default for Options {
@@ -142,6 +154,8 @@ impl Default for Options {
             follow_redirects: Some(5),
             #[cfg(feature = "native-tls")]
             tls_connector: None,
+            #[cfg(feature = "tls")]
+            client_config: None,
         }
     }
 }
@@ -200,13 +214,13 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             let port = match authority.port_u16() {
                 Some(port) => port,
                 None if scheme == &Scheme::HTTP => 80,
-                #[cfg(feature = "native-tls")]
+                #[cfg(any(feature = "native-tls", feature = "tls"))]
                 None if scheme == &Scheme::HTTPS => 443,
                 _ => return Err(Error::UnsupportedProtocol),
             };
 
             let mut stream = Stream::new(
-                #[cfg(feature = "native-tls")]
+                #[cfg(any(feature = "native-tls", feature = "tls"))]
                 scheme,
                 host,
                 port,
