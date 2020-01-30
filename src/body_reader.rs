@@ -13,10 +13,14 @@
 // limitations under the License.
 use std::io::{BufRead, Read, Result as IoResult};
 
+#[cfg(feature = "encoding_rs")]
+use encoding_rs::Encoding;
 #[cfg(feature = "flate2")]
 use flate2::bufread::{DeflateDecoder, GzDecoder};
-use http::header::{HeaderMap, HeaderValue, ToStrError, TRANSFER_ENCODING};
+use http::header::{HeaderMap, HeaderValue, ToStrError, CONTENT_TYPE, TRANSFER_ENCODING};
 
+#[cfg(feature = "encoding_rs")]
+use super::encoded::EncodedReader;
 use super::{chunked::ChunkedReader, Error};
 
 pub struct BodyReader(Box<dyn BufRead + Send>);
@@ -27,6 +31,8 @@ impl BodyReader {
         headers: Option<&HeaderMap>,
     ) -> Result<Self, Error> {
         if let Some(headers) = headers {
+            reader = compressed_reader(reader, headers)?;
+            reader = chunked_reader(reader, headers)?;
             reader = encoded_reader(reader, headers)?;
         }
 
@@ -51,7 +57,7 @@ impl Read for BodyReader {
 }
 
 #[cfg(feature = "flate2")]
-fn encoded_reader(
+fn compressed_reader(
     mut reader: Box<dyn BufRead + Send>,
     headers: &HeaderMap,
 ) -> Result<Box<dyn BufRead + Send>, Error> {
@@ -70,7 +76,6 @@ fn encoded_reader(
     if let Some(encodings) = headers.get(TRANSFER_ENCODING) {
         for encoding in split_encodings(encodings)? {
             reader = match encoding.as_str() {
-                "chunked" => chunked_reader(reader),
                 "deflate" => deflate_reader(reader),
                 "gzip" => gzip_reader(reader),
                 _ => reader,
@@ -92,14 +97,21 @@ fn encoded_reader(
 }
 
 #[cfg(not(feature = "flate2"))]
-fn encoded_reader(
+fn compressed_reader(
+    reader: Box<dyn BufRead + Send>,
+    _headers: &HeaderMap,
+) -> Result<Box<dyn BufRead + Send>, Error> {
+    Ok(reader)
+}
+
+fn chunked_reader(
     mut reader: Box<dyn BufRead + Send>,
     headers: &HeaderMap,
 ) -> Result<Box<dyn BufRead + Send>, Error> {
     if let Some(encodings) = headers.get(TRANSFER_ENCODING) {
         for encoding in split_encodings(encodings)? {
             if encoding == "chunked" {
-                reader = chunked_reader(reader);
+                reader = Box::new(ChunkedReader::new(reader));
             }
         }
     }
@@ -107,8 +119,28 @@ fn encoded_reader(
     Ok(reader)
 }
 
-fn chunked_reader(reader: Box<dyn BufRead + Send>) -> Box<dyn BufRead + Send> {
-    Box::new(ChunkedReader::new(reader))
+#[cfg(feature = "encoding_rs")]
+fn encoded_reader(
+    mut reader: Box<dyn BufRead + Send>,
+    headers: &HeaderMap,
+) -> Result<Box<dyn BufRead + Send>, Error> {
+    if let Some(type_) = headers.get(CONTENT_TYPE) {
+        if let Some(charset) = type_.to_str()?.splitn(2, "charset=").nth(1) {
+            if let Some(encoding) = Encoding::for_label(charset.as_bytes()) {
+                reader = Box::new(EncodedReader::new(reader, encoding));
+            }
+        }
+    }
+
+    Ok(reader)
+}
+
+#[cfg(not(feature = "encoding_rs"))]
+fn encoded_reader(
+    reader: Box<dyn BufRead + Send>,
+    _headers: &HeaderMap,
+) -> Result<Box<dyn BufRead + Send>, Error> {
+    Ok(reader)
 }
 
 fn split_encodings(

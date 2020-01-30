@@ -10,6 +10,7 @@ json = ["serde", "serde_json"]
 tls = ["rustls", "webpki", "webpki-roots"]
 
 [dependencies]
+encoding_rs = { version = "0.8", optional = true }
 flate2 = { version = "1.0", optional = true }
 http = "0.2"
 httparse = "1.3"

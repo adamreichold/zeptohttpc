@@ -14,12 +14,16 @@
 mod body_reader;
 mod body_writer;
 mod chunked;
+#[cfg(feature = "encoding_rs")]
+mod encoded;
 mod error;
 mod happy_eyeballs;
 mod parse;
 mod stream;
 mod timeout;
 
+#[cfg(feature = "encoding_rs")]
+pub use encoding_rs;
 pub use http;
 pub use httparse;
 #[cfg(feature = "native-tls")]
