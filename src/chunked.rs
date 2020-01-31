@@ -125,7 +125,7 @@ fn read_line_ending<R: BufRead>(reader: R) -> IoResult<()> {
     parse(reader, |buf| {
         if buf.starts_with(b"\r\n") {
             Ok(Complete((2, ())))
-        } else if buf.starts_with(b"\r") {
+        } else if buf == b"" || buf == b"\r" {
             Ok(Partial)
         } else {
             Err(IoError::new(Other, Error::InvalidLineEnding))
@@ -136,6 +136,8 @@ fn read_line_ending<R: BufRead>(reader: R) -> IoResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::io::ErrorKind::UnexpectedEof;
 
     #[test]
     fn parse_chunks() {
@@ -161,5 +163,22 @@ mod tests {
         ChunkedReader::new(&b"0\r\n"[..])
             .read_to_end(&mut buf)
             .unwrap_err();
+    }
+
+    #[test]
+    fn parse_line_endings() {
+        read_line_ending(&b"\r\nfoo"[..]).unwrap();
+
+        let err = read_line_ending(&b"bar"[..]).unwrap_err();
+        assert_eq!(Other, err.kind());
+
+        let err = read_line_ending(&b"\rbaz"[..]).unwrap_err();
+        assert_eq!(Other, err.kind());
+
+        let err = read_line_ending(&b""[..]).unwrap_err();
+        assert_eq!(UnexpectedEof, err.kind());
+
+        let err = read_line_ending(&b"\r"[..]).unwrap_err();
+        assert_eq!(UnexpectedEof, err.kind());
     }
 }
