@@ -20,14 +20,18 @@ use zeptohttpc::{http::Request, Options, RequestBuilderExt, RequestExt};
 fn main() -> Result<(), Box<dyn Error>> {
     let uri = args().nth(1).ok_or("Missing URI argument")?;
 
-    let req = Request::builder().uri(uri).empty()?;
-
     let mut opts = Options::default();
     opts.follow_redirects = None;
 
-    let mut resp = req.send_with_opts(opts)?;
+    let resp = Request::get(uri).empty()?.send_with_opts(opts)?;
 
-    copy(resp.body_mut(), &mut stdout())?;
+    for (name, value) in resp.headers() {
+        eprintln!("{}: {:?}", name, value);
+    }
+
+    eprintln!();
+
+    copy(&mut resp.into_body(), &mut stdout())?;
 
     Ok(())
 }
