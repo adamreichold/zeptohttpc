@@ -402,5 +402,7 @@ fn handle_redirects(resp: &Response<BodyReader>, opts: &mut Options) -> Result<O
     Ok(None)
 }
 
-const MAX_HEADERS: usize = 64;
 const DEF_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
+const MAX_HEADERS: usize = 128;
+const MAX_PARSE_BUF_LEN: usize = MAX_HEADERS * 1024;

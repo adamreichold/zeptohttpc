@@ -1,6 +1,11 @@
-use std::io::{BufRead, Error as IoError, ErrorKind::UnexpectedEof};
+use std::io::{
+    BufRead, Error as IoError,
+    ErrorKind::{Other, UnexpectedEof},
+};
 
 use httparse::Status::{self, Complete, Partial};
+
+use super::MAX_PARSE_BUF_LEN;
 
 pub fn parse<R, P, T, E>(mut reader: R, parser: P) -> Result<T, E>
 where
@@ -29,6 +34,9 @@ where
         let buf = reader.fill_buf()?;
         if buf.is_empty() {
             return Err(IoError::from(UnexpectedEof).into());
+        }
+        if buf1.len() + buf.len() > MAX_PARSE_BUF_LEN {
+            return Err(IoError::new(Other, "Maximum parse buffer length reached").into());
         }
         buf1.extend_from_slice(buf);
 

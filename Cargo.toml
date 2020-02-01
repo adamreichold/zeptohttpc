@@ -1,7 +1,7 @@
 [package]
 name = "zeptohttpc"
 description = "minimal HTTP client using http and httparse crates"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Adam Reichold <adam.reichold@t-online.de>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
