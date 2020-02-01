@@ -45,7 +45,7 @@ pub use body_reader::BodyReader;
 pub use body_writer::{BodyKind, BodyWriter};
 pub use error::Error;
 
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::io::{BufReader, BufWriter, Read, Result as IoResult, Seek, Write};
 use std::marker::PhantomData;
 #[cfg(feature = "tls")]
@@ -60,7 +60,7 @@ use http::{
     request::{Builder as RequestBuilder, Parts as RequestParts, Request},
     response::Response,
     uri::{PathAndQuery, Scheme, Uri},
-    Error as HttpError, Method,
+    Error as HttpError,
 };
 use httparse::{
     Response as ResponseParser,
@@ -80,22 +80,6 @@ use body_writer::{EmptyBody, IoBody, MemBody};
 use chunked::ChunkedWriter;
 use parse::parse;
 use stream::Stream;
-
-pub fn get<U>(uri: U) -> RequestBuilder
-where
-    Uri: TryFrom<U>,
-    <Uri as TryFrom<U>>::Error: Into<HttpError>,
-{
-    Request::builder().method(Method::GET).uri(uri)
-}
-
-pub fn post<U>(uri: U) -> RequestBuilder
-where
-    Uri: TryFrom<U>,
-    <Uri as TryFrom<U>>::Error: Into<HttpError>,
-{
-    Request::builder().method(Method::POST).uri(uri)
-}
 
 pub trait RequestBuilderExt {
     fn empty(self) -> Result<Request<EmptyBody>, HttpError>;
