@@ -13,6 +13,27 @@
 // limitations under the License.
 #![forbid(unsafe_code)]
 
+//! This crate aims to be the smallest possible yet practically useful HTTP client built on top of the `http` and `httparse` crates.
+//!
+//! ```
+//! # use std::{error::Error, time::Duration};
+//! use zeptohttpc::{http::Request, Options, RequestBuilderExt, RequestExt, ResponseExt};
+//!
+//! # fn main() -> Result<(), Box<dyn Error>> {
+//! let req = Request::get("http://httpbin.org/base64/emVwdG9odHRwYw%3D%3D").empty().unwrap();
+//!
+//! let mut opts = Options::default();
+//! opts.timeout = Some(Duration::from_secs(10));
+//!
+//! let resp = req.send_with_opts(opts).unwrap();
+//!
+//! let body = resp.into_string().unwrap();
+//! assert_eq!("zeptohttpc", body);
+//! #
+//! # Ok(())
+//! # }
+//! ```
+
 mod body_reader;
 mod body_writer;
 mod chunked;
