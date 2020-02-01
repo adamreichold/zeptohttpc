@@ -13,14 +13,8 @@
 // limitations under the License.
 use std::io::{BufRead, Read, Result as IoResult};
 
-#[cfg(feature = "encoding_rs")]
-use encoding_rs::Encoding;
-#[cfg(feature = "flate2")]
-use flate2::bufread::{DeflateDecoder, GzDecoder};
-use http::header::{HeaderMap, HeaderValue, ToStrError, CONTENT_TYPE, TRANSFER_ENCODING};
+use http::header::{HeaderMap, HeaderValue, ToStrError, TRANSFER_ENCODING};
 
-#[cfg(feature = "encoding_rs")]
-use super::encoded::EncodedReader;
 use super::{chunked::ChunkedReader, Error};
 
 pub struct BodyReader(Box<dyn BufRead + Send>);
@@ -63,6 +57,7 @@ fn compressed_reader(
 ) -> Result<Box<dyn BufRead + Send>, Error> {
     use std::io::BufReader;
 
+    use flate2::bufread::{DeflateDecoder, GzDecoder};
     use http::header::CONTENT_ENCODING;
 
     fn deflate_reader(reader: Box<dyn BufRead + Send>) -> Box<dyn BufRead + Send> {
@@ -124,6 +119,11 @@ fn encoded_reader(
     mut reader: Box<dyn BufRead + Send>,
     headers: &HeaderMap,
 ) -> Result<Box<dyn BufRead + Send>, Error> {
+    use encoding_rs::Encoding;
+    use http::header::CONTENT_TYPE;
+
+    use super::encoded::EncodedReader;
+
     if let Some(type_) = headers.get(CONTENT_TYPE) {
         if let Some(charset) = type_.to_str()?.splitn(2, "charset=").nth(1) {
             if let Some(encoding) = Encoding::for_label(charset.as_bytes()) {
