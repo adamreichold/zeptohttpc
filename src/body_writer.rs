@@ -69,6 +69,29 @@ impl<B: Seek + Read> BodyWriter for IoBody<B> {
     }
 }
 
+#[cfg(feature = "flate2")]
+pub mod compressed_body {
+    use super::*;
+
+    use flate2::write::GzEncoder;
+
+    #[derive(Debug, Clone)]
+    pub struct CompressedBody<B>(pub B);
+
+    impl<B: BodyWriter> BodyWriter for CompressedBody<B> {
+        fn kind(&mut self) -> IoResult<BodyKind> {
+            Ok(BodyKind::Chunked)
+        }
+
+        fn write<W: Write>(&mut self, writer: W) -> IoResult<()> {
+            let mut writer = GzEncoder::new(writer, Default::default());
+            self.0.write(&mut writer)?;
+            writer.finish()?;
+            Ok(())
+        }
+    }
+}
+
 #[cfg(feature = "json")]
 pub mod json_body {
     use super::*;

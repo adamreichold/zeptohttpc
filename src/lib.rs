@@ -24,8 +24,6 @@ mod parse;
 mod stream;
 mod timeout;
 
-#[cfg(feature = "encoding_rs")]
-pub use encoding_rs;
 pub use http;
 pub use httparse;
 #[cfg(feature = "native-tls")]
@@ -38,8 +36,6 @@ pub use serde;
 pub use serde_json;
 #[cfg(feature = "tls")]
 pub use webpki;
-#[cfg(feature = "tls")]
-pub use webpki_roots;
 
 pub use body_reader::BodyReader;
 pub use body_writer::{BodyKind, BodyWriter};
@@ -54,7 +50,7 @@ use std::time::Duration;
 
 use http::{
     header::{
-        HeaderValue, ACCEPT_ENCODING, CONNECTION, CONTENT_LENGTH, HOST, LOCATION,
+        Entry, HeaderValue, ACCEPT_ENCODING, CONNECTION, CONTENT_LENGTH, HOST, LOCATION,
         TRANSFER_ENCODING, USER_AGENT,
     },
     request::{Builder as RequestBuilder, Parts as RequestParts, Request},
@@ -74,6 +70,8 @@ use rustls::ClientConfig;
 #[cfg(feature = "json")]
 use serde::{de::DeserializeOwned, ser::Serialize};
 
+#[cfg(feature = "flate2")]
+use body_writer::compressed_body::CompressedBody;
 #[cfg(feature = "json")]
 use body_writer::json_body::JsonBody;
 use body_writer::{EmptyBody, IoBody, MemBody};
@@ -153,11 +151,25 @@ impl Default for Options<'_> {
 }
 
 pub trait RequestExt {
+    type Body;
+
+    #[cfg(feature = "flate2")]
+    fn compressed(self) -> Result<Request<CompressedBody<Self::Body>>, Error>;
+
     fn send(self) -> Result<Response<BodyReader>, Error>;
     fn send_with_opts(self, opts: Options<'_>) -> Result<Response<BodyReader>, Error>;
 }
 
 impl<B: BodyWriter> RequestExt for Request<B> {
+    type Body = B;
+
+    #[cfg(feature = "flate2")]
+    fn compressed(mut self) -> Result<Request<CompressedBody<B>>, Error> {
+        append_enconding(self.headers_mut().entry(TRANSFER_ENCODING), "gzip")?;
+
+        Ok(self.map(CompressedBody))
+    }
+
     fn send(self) -> Result<Response<BodyReader>, Error> {
         self.send_with_opts(Default::default())
     }
@@ -188,9 +200,7 @@ impl<B: BodyWriter> RequestExt for Request<B> {
                 false
             }
             BodyKind::Chunked => {
-                parts
-                    .headers
-                    .insert(TRANSFER_ENCODING, HeaderValue::from_static("chunked"));
+                append_enconding(parts.headers.entry(TRANSFER_ENCODING), "chunked")?;
 
                 true
             }
@@ -258,6 +268,25 @@ impl ResponseExt for Response<BodyReader> {
 
         from_reader(self.into_body()).map_err(Into::into)
     }
+}
+
+fn append_enconding(
+    encodings: Entry<'_, HeaderValue>,
+    encoding: &'static str,
+) -> Result<(), Error> {
+    match encodings {
+        Entry::Vacant(encodings) => {
+            encodings.insert(HeaderValue::from_static(encoding));
+        }
+        Entry::Occupied(mut encodings) => {
+            let mut encodings1 = encodings.get().to_str()?.to_owned();
+            encodings1.push(',');
+            encodings1.push_str(encoding);
+            *encodings.get_mut() = HeaderValue::from_str(&encodings1)?;
+        }
+    }
+
+    Ok(())
 }
 
 fn write_request<B: BodyWriter>(
