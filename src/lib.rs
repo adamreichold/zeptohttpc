@@ -45,6 +45,7 @@ pub use error::Error;
 
 use std::convert::{TryFrom, TryInto};
 use std::io::{BufReader, BufWriter, Read, Result as IoResult, Seek, Write};
+use std::marker::PhantomData;
 #[cfg(feature = "tls")]
 use std::sync::Arc;
 use std::time::Duration;
@@ -136,20 +137,20 @@ impl RequestBuilderExt for RequestBuilder {
     }
 }
 
-#[non_exhaustive]
-#[derive(Clone)]
-pub struct Options {
+#[derive(Clone, Copy)]
+pub struct Options<'a> {
     pub connect_timeout: Duration,
     pub connect_delay: Duration,
     pub timeout: Option<Duration>,
     pub follow_redirects: Option<usize>,
     #[cfg(feature = "native-tls")]
-    pub tls_connector: Option<TlsConnector>,
+    pub tls_connector: Option<&'a TlsConnector>,
     #[cfg(feature = "tls")]
-    pub client_config: Option<Arc<ClientConfig>>,
+    pub client_config: Option<&'a Arc<ClientConfig>>,
+    _private: PhantomData<&'a ()>,
 }
 
-impl Default for Options {
+impl Default for Options<'_> {
     fn default() -> Self {
         Self {
             connect_timeout: Duration::from_secs(10),
@@ -160,13 +161,14 @@ impl Default for Options {
             tls_connector: None,
             #[cfg(feature = "tls")]
             client_config: None,
+            _private: PhantomData,
         }
     }
 }
 
 pub trait RequestExt {
     fn send(self) -> Result<Response<BodyReader>, Error>;
-    fn send_with_opts(self, opts: Options) -> Result<Response<BodyReader>, Error>;
+    fn send_with_opts(self, opts: Options<'_>) -> Result<Response<BodyReader>, Error>;
 }
 
 impl<B: BodyWriter> RequestExt for Request<B> {
@@ -174,7 +176,7 @@ impl<B: BodyWriter> RequestExt for Request<B> {
         self.send_with_opts(Default::default())
     }
 
-    fn send_with_opts(self, mut opts: Options) -> Result<Response<BodyReader>, Error> {
+    fn send_with_opts(self, mut opts: Options<'_>) -> Result<Response<BodyReader>, Error> {
         let (mut parts, mut body) = self.into_parts();
 
         parts

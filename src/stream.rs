@@ -56,13 +56,13 @@ impl Stream {
         match opts.timeout {
             #[cfg(feature = "native-tls")]
             None if scheme == &Scheme::HTTPS => {
-                let stream = perform_native_tls_handshake(stream, host, &opts.tls_connector)?;
+                let stream = perform_native_tls_handshake(stream, host, opts.tls_connector)?;
 
                 Ok(Self::NativeTls(stream))
             }
             #[cfg(feature = "tls")]
             None if scheme == &Scheme::HTTPS => {
-                let stream = perform_rustls_handshake(stream, host, &opts.client_config)?;
+                let stream = perform_rustls_handshake(stream, host, opts.client_config)?;
 
                 Ok(Self::Rustls(Box::new(stream)))
             }
@@ -70,14 +70,14 @@ impl Stream {
             #[cfg(feature = "native-tls")]
             Some(timeout) if scheme == &Scheme::HTTPS => {
                 let timeout = Timeout::start(&stream, timeout)?;
-                let stream = perform_native_tls_handshake(stream, host, &opts.tls_connector)?;
+                let stream = perform_native_tls_handshake(stream, host, opts.tls_connector)?;
 
                 Ok(Self::NativeTlsWithTimeout(stream, timeout))
             }
             #[cfg(feature = "tls")]
             Some(timeout) if scheme == &Scheme::HTTPS => {
                 let timeout = Timeout::start(&stream, timeout)?;
-                let stream = perform_rustls_handshake(stream, host, &opts.client_config)?;
+                let stream = perform_rustls_handshake(stream, host, opts.client_config)?;
 
                 Ok(Self::RustlsWithTimeout(Box::new(stream), timeout))
             }
@@ -94,10 +94,10 @@ impl Stream {
 fn perform_native_tls_handshake(
     stream: TcpStream,
     host: &str,
-    connector: &Option<TlsConnector>,
+    tls_connector: Option<&TlsConnector>,
 ) -> Result<TlsStream<TcpStream>, Error> {
-    let handshake = match connector {
-        Some(connector) => connector.connect(host, stream),
+    let handshake = match tls_connector {
+        Some(tls_connector) => tls_connector.connect(host, stream),
         None => TlsConnector::new()?.connect(host, stream),
     };
 
@@ -118,7 +118,7 @@ fn perform_native_tls_handshake(
 fn perform_rustls_handshake(
     mut stream: TcpStream,
     host: &str,
-    client_config: &Option<Arc<ClientConfig>>,
+    client_config: Option<&Arc<ClientConfig>>,
 ) -> Result<StreamOwned<ClientSession, TcpStream>, Error> {
     let name = DNSNameRef::try_from_ascii_str(host)?;
 
