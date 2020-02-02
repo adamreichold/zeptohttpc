@@ -77,7 +77,7 @@ use http::{
     request::{Builder as RequestBuilder, Parts as RequestParts, Request},
     response::Response,
     uri::{PathAndQuery, Scheme, Uri},
-    Error as HttpError,
+    Error as HttpError, Version,
 };
 use httparse::{
     Response as ResponseParser,
@@ -360,6 +360,12 @@ fn read_response(stream: Stream) -> Result<Response<BodyReader>, Error> {
                 let mut resp = Response::builder();
 
                 resp = resp.status(parser.code.ok_or(Error::MissingStatus)?);
+
+                resp = match parser.version {
+                    Some(0) => resp.version(Version::HTTP_10),
+                    Some(1) => resp.version(Version::HTTP_11),
+                    _ => resp,
+                };
 
                 for header in parser.headers {
                     resp = resp.header(header.name, header.value);
