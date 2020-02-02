@@ -14,6 +14,7 @@
 use std::convert::TryInto;
 use std::io::{copy, Read, Result as IoResult, Seek, SeekFrom, Write};
 
+#[derive(Debug, Clone, Copy)]
 pub enum BodyKind {
     Empty,
     KnownLength(u64),
