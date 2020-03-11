@@ -11,7 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
+use std::str::FromStr;
 use std::sync::mpsc::channel;
 use std::thread::spawn;
 
@@ -21,10 +22,7 @@ pub fn connect(host: &str, port: u16, opts: &Options) -> Result<TcpStream, Error
     let timeout = opts.connect_timeout;
     let delay = opts.connect_delay;
 
-    let mut addrs: Vec<_> = (host, port)
-        .to_socket_addrs()?
-        .map(|addr| (0, addr))
-        .collect();
+    let mut addrs = resolve_addrs(host, port)?;
 
     if let [(_prio, addr)] = addrs.as_slice() {
         return TcpStream::connect_timeout(addr, timeout).map_err(Error::from);
@@ -73,4 +71,57 @@ pub fn connect(host: &str, port: u16, opts: &Options) -> Result<TcpStream, Error
     }
 
     Err(first_err.unwrap().into())
+}
+
+fn resolve_addrs(host: &str, port: u16) -> Result<Vec<(usize, SocketAddr)>, Error> {
+    if host.starts_with('[') && host.ends_with(']') {
+        if let Ok(addr) = IpAddr::from_str(&host[1..host.len() - 1]) {
+            return Ok(vec![(0, SocketAddr::new(addr, port))]);
+        }
+    }
+
+    Ok((host, port)
+        .to_socket_addrs()?
+        .map(|addr| (0, addr))
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::net::{Ipv4Addr, Ipv6Addr};
+
+    #[test]
+    fn resolve_domain() {
+        let addrs = resolve_addrs("localhost", 80).unwrap();
+
+        for (_prio, addr) in addrs {
+            assert!(addr.ip().is_loopback());
+            assert_eq!(addr.port(), 80);
+        }
+    }
+
+    #[test]
+    fn resolve_ipv4_address() {
+        let addrs = resolve_addrs("127.0.0.1", 80).unwrap();
+
+        assert_eq!(
+            addrs,
+            vec![(0, SocketAddr::new(Ipv4Addr::new(127, 0, 0, 1).into(), 80))]
+        );
+    }
+
+    #[test]
+    fn resolve_ipv6_address() {
+        let addrs = resolve_addrs("[::1]", 80).unwrap();
+
+        assert_eq!(
+            addrs,
+            vec![(
+                0,
+                SocketAddr::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1).into(), 80)
+            )]
+        );
+    }
 }
