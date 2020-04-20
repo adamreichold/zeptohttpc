@@ -97,6 +97,8 @@ pub mod compressed_body {
 pub mod json_body {
     use super::*;
 
+    use std::io::BufWriter;
+
     use serde::ser::Serialize;
     use serde_json::ser::to_writer;
 
@@ -109,7 +111,9 @@ pub mod json_body {
         }
 
         fn write<W: Write>(&mut self, writer: W) -> IoResult<()> {
-            to_writer(writer, &self.0)?;
+            let mut writer = BufWriter::new(writer);
+            to_writer(&mut writer, &self.0)?;
+            writer.flush()?;
             Ok(())
         }
     }
