@@ -92,6 +92,7 @@ fn compressed_reader(
 }
 
 #[cfg(not(feature = "flate2"))]
+#[allow(clippy::unnecessary_wraps)]
 fn compressed_reader(
     reader: Box<dyn BufRead + Send>,
     _headers: &HeaderMap,
@@ -136,6 +137,7 @@ fn encoded_reader(
 }
 
 #[cfg(not(feature = "encoding_rs"))]
+#[allow(clippy::unnecessary_wraps)]
 fn encoded_reader(
     reader: Box<dyn BufRead + Send>,
     _headers: &HeaderMap,
