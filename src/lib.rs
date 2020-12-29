@@ -102,7 +102,9 @@ use stream::Stream;
 
 pub trait RequestBuilderExt {
     fn empty(self) -> Result<Request<EmptyBody>, HttpError>;
+    #[allow(clippy::wrong_self_convention)]
     fn from_mem<B: AsRef<[u8]>>(self, body: B) -> Result<Request<MemBody<B>>, HttpError>;
+    #[allow(clippy::wrong_self_convention)]
     fn from_io<B: Seek + Read>(self, body: B) -> Result<Request<IoBody<B>>, HttpError>;
     #[cfg(feature = "json")]
     fn json<B: Serialize>(self, body: B) -> Result<Request<JsonBody<B>>, HttpError>;
@@ -342,6 +344,8 @@ fn write_request<B: BodyWriter>(
     } else {
         body.write(&mut writer)?;
     }
+
+    writer.get_ref().set_nodelay(true)?;
 
     writer.flush()?;
 

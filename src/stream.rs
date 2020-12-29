@@ -88,6 +88,20 @@ impl Stream {
             }
         }
     }
+
+    pub fn set_nodelay(&self, val: bool) -> IoResult<()> {
+        match self {
+            Self::Tcp(stream) | Self::TcpWithTimeout(stream, _) => stream.set_nodelay(val),
+            #[cfg(feature = "native-tls")]
+            Self::NativeTls(stream) | Self::NativeTlsWithTimeout(stream, _) => {
+                stream.get_ref().set_nodelay(val)
+            }
+            #[cfg(feature = "tls")]
+            Self::Rustls(stream) | Self::RustlsWithTimeout(stream, _) => {
+                stream.sock.set_nodelay(val)
+            }
+        }
+    }
 }
 
 #[cfg(feature = "native-tls")]
