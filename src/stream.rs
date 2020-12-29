@@ -88,6 +88,18 @@ impl Stream {
             }
         }
     }
+
+    pub fn cork(&self, val: bool) -> IoResult<()> {
+        match self {
+            Self::Tcp(stream) | Self::TcpWithTimeout(stream, _) => cork(stream, val),
+            #[cfg(feature = "native-tls")]
+            Self::NativeTls(stream) | Self::NativeTlsWithTimeout(stream, _) => {
+                cork(stream.get_ref(), val)
+            }
+            #[cfg(feature = "tls")]
+            Self::Rustls(stream) | Self::RustlsWithTimeout(stream, _) => cork(&stream.sock, val),
+        }
+    }
 }
 
 #[cfg(feature = "native-tls")]
@@ -203,4 +215,35 @@ fn handle_close_notify(
         }
         res => res,
     }
+}
+
+#[cfg(target_os = "linux")]
+fn cork(stream: &TcpStream, val: bool) -> IoResult<()> {
+    use std::io::Error as IoError;
+    use std::mem::size_of;
+    use std::os::unix::io::AsRawFd;
+
+    use libc::{c_int, setsockopt, IPPROTO_TCP, TCP_CORK};
+
+    let val = val as c_int;
+
+    if unsafe {
+        setsockopt(
+            stream.as_raw_fd(),
+            IPPROTO_TCP,
+            TCP_CORK,
+            &val as *const _ as _,
+            size_of::<c_int>() as _,
+        )
+    } == 0
+    {
+        Ok(())
+    } else {
+        Err(IoError::last_os_error())
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn cork(_stream: &TcpStream, _val: bool) -> IoResult<()> {
+    Ok(())
 }

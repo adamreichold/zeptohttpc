@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![forbid(unsafe_code)]
 
 //! This crate aims to be the smallest possible yet practically useful HTTP client built on top of the `http` and `httparse` crates.
 //!
@@ -102,7 +101,9 @@ use stream::Stream;
 
 pub trait RequestBuilderExt {
     fn empty(self) -> Result<Request<EmptyBody>, HttpError>;
+    #[allow(clippy::wrong_self_convention)]
     fn from_mem<B: AsRef<[u8]>>(self, body: B) -> Result<Request<MemBody<B>>, HttpError>;
+    #[allow(clippy::wrong_self_convention)]
     fn from_io<B: Seek + Read>(self, body: B) -> Result<Request<IoBody<B>>, HttpError>;
     #[cfg(feature = "json")]
     fn json<B: Serialize>(self, body: B) -> Result<Request<JsonBody<B>>, HttpError>;
@@ -316,6 +317,8 @@ fn write_request<B: BodyWriter>(
     body: &mut B,
     chunked: bool,
 ) -> Result<(), Error> {
+    stream.cork(true)?;
+
     let mut writer = BufWriter::new(stream);
 
     write!(
@@ -343,7 +346,9 @@ fn write_request<B: BodyWriter>(
         body.write(&mut writer)?;
     }
 
-    writer.flush()?;
+    let stream = writer.into_inner()?;
+
+    stream.cork(false)?;
 
     Ok(())
 }

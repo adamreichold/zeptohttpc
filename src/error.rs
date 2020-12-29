@@ -98,6 +98,12 @@ impl From<io::ErrorKind> for Error {
     }
 }
 
+impl<W> From<io::IntoInnerError<W>> for Error {
+    fn from(err: io::IntoInnerError<W>) -> Self {
+        Self::Io(err.into())
+    }
+}
+
 impl From<http::Error> for Error {
     fn from(err: http::Error) -> Self {
         Self::Http(err)
