@@ -67,7 +67,7 @@ use std::io::{BufReader, BufWriter, Read, Result as IoResult, Seek, Write};
 use std::marker::PhantomData;
 #[cfg(feature = "tls")]
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use http::{
     header::{
@@ -229,6 +229,8 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             }
         };
 
+        let mut start = Instant::now();
+
         loop {
             let scheme = parts.uri.scheme().ok_or(Error::MissingScheme)?;
             let authority = parts.uri.authority().ok_or(Error::MissingAuthority)?;
@@ -255,7 +257,11 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             write_request(&mut stream, &parts, &mut body, chunked)?;
             let resp = read_response(stream)?;
 
-            if let Some(location) = handle_redirects(&resp, &mut opts)? {
+            let now = Instant::now();
+            let elapsed = now.duration_since(start);
+            start = now;
+
+            if let Some(location) = handle_redirects(&resp, &mut opts, elapsed)? {
                 parts.uri = location;
                 continue;
             }
@@ -384,7 +390,11 @@ fn read_response(stream: Stream) -> Result<Response<BodyReader>, Error> {
     resp.body(body).map_err(Error::from)
 }
 
-fn handle_redirects(resp: &Response<BodyReader>, opts: &mut Options) -> Result<Option<Uri>, Error> {
+fn handle_redirects(
+    resp: &Response<BodyReader>,
+    opts: &mut Options,
+    elapsed: Duration,
+) -> Result<Option<Uri>, Error> {
     if let Some(redirects) = &mut opts.follow_redirects {
         match resp.status().as_u16() {
             301 | 302 | 303 | 307 | 308 => {
@@ -393,6 +403,14 @@ fn handle_redirects(resp: &Response<BodyReader>, opts: &mut Options) -> Result<O
                 }
 
                 *redirects -= 1;
+
+                if let Some(timeout) = &mut opts.timeout {
+                    if *timeout <= elapsed {
+                        return Err(Error::TooManyRedirects);
+                    }
+
+                    *timeout -= elapsed;
+                }
 
                 let location: Uri = resp
                     .headers()
