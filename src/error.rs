@@ -28,6 +28,7 @@ pub enum Error {
     Io(io::Error),
     Http(http::Error),
     HttpInvalidUri(http::uri::InvalidUri),
+    HttpInvalidUriParts(http::uri::InvalidUriParts),
     HttpHeaderInvalidValue(http::header::InvalidHeaderValue),
     HttpHeaderToStr(http::header::ToStrError),
     Httparse(httparse::Error),
@@ -45,6 +46,7 @@ impl StdError for Error {
             Self::Io(err) => Some(err),
             Self::Http(err) => Some(err),
             Self::HttpInvalidUri(err) => Some(err),
+            Self::HttpInvalidUriParts(err) => Some(err),
             Self::HttpHeaderInvalidValue(err) => Some(err),
             Self::HttpHeaderToStr(err) => Some(err),
             Self::Httparse(err) => Some(err),
@@ -73,6 +75,7 @@ impl fmt::Display for Error {
             Self::Io(err) => write!(fmt, "I/O error: {}", err),
             Self::Http(err) => write!(fmt, "HTTP error: {}", err),
             Self::HttpInvalidUri(err) => write!(fmt, "HTTP invalid URI: {}", err),
+            Self::HttpInvalidUriParts(err) => write!(fmt, "HTTP invalid URI parts: {}", err),
             Self::HttpHeaderInvalidValue(err) => write!(fmt, "HTTP header invalid value: {}", err),
             Self::HttpHeaderToStr(err) => write!(fmt, "HTTP header to string: {}", err),
             Self::Httparse(err) => write!(fmt, "HTTP parser error: {}", err),
@@ -107,6 +110,12 @@ impl From<http::Error> for Error {
 impl From<http::uri::InvalidUri> for Error {
     fn from(err: http::uri::InvalidUri) -> Self {
         Self::HttpInvalidUri(err)
+    }
+}
+
+impl From<http::uri::InvalidUriParts> for Error {
+    fn from(err: http::uri::InvalidUriParts) -> Self {
+        Self::HttpInvalidUriParts(err)
     }
 }
 

@@ -262,7 +262,13 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             start = now;
 
             if let Some(location) = handle_redirects(&resp, &mut opts, elapsed)? {
-                parts.uri = location;
+                let uri = parts.uri.into_parts();
+
+                let mut location = location.into_parts();
+                location.scheme = location.scheme.or(uri.scheme);
+                location.authority = location.authority.or(uri.authority);
+
+                parts.uri = location.try_into()?;
                 continue;
             }
 
