@@ -13,21 +13,26 @@
 // limitations under the License.
 use std::io::{ErrorKind::TimedOut, Read, Result as IoResult};
 use std::net::{Shutdown, TcpStream};
-use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
+use std::sync::mpsc::{channel, RecvTimeoutError, Sender, TryRecvError};
 use std::thread::spawn;
-use std::time::Duration;
+use std::time::Instant;
 
 use super::Error;
 
 pub struct Timeout(Sender<()>);
 
 impl Timeout {
-    pub fn start(stream: &TcpStream, duration: Duration) -> Result<Self, Error> {
+    pub fn start(stream: &TcpStream, deadline: Instant) -> Result<Self, Error> {
         let stream = stream.try_clone()?;
         let (tx, rx) = channel();
 
         spawn(move || {
-            if let Err(RecvTimeoutError::Timeout) = rx.recv_timeout(duration) {
+            let shutdown = match deadline.checked_duration_since(Instant::now()) {
+                Some(timeout) => rx.recv_timeout(timeout) == Err(RecvTimeoutError::Timeout),
+                None => rx.try_recv() == Err(TryRecvError::Empty),
+            };
+
+            if shutdown {
                 drop(rx);
 
                 let _ = stream.shutdown(Shutdown::Both);

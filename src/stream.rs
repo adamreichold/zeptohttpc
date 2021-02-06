@@ -53,7 +53,7 @@ impl Stream {
     ) -> Result<Self, Error> {
         let stream = connect(host, port, &opts)?;
 
-        match opts.timeout {
+        match opts.deadline {
             #[cfg(feature = "native-tls")]
             None if scheme == &Scheme::HTTPS => {
                 let stream = perform_native_tls_handshake(stream, host, opts.tls_connector)?;
@@ -68,21 +68,21 @@ impl Stream {
             }
             None => Ok(Self::Tcp(stream)),
             #[cfg(feature = "native-tls")]
-            Some(timeout) if scheme == &Scheme::HTTPS => {
-                let timeout = Timeout::start(&stream, timeout)?;
+            Some(deadline) if scheme == &Scheme::HTTPS => {
+                let timeout = Timeout::start(&stream, deadline)?;
                 let stream = perform_native_tls_handshake(stream, host, opts.tls_connector)?;
 
                 Ok(Self::NativeTlsWithTimeout(stream, timeout))
             }
             #[cfg(feature = "tls")]
-            Some(timeout) if scheme == &Scheme::HTTPS => {
-                let timeout = Timeout::start(&stream, timeout)?;
+            Some(deadline) if scheme == &Scheme::HTTPS => {
+                let timeout = Timeout::start(&stream, deadline)?;
                 let stream = perform_rustls_handshake(stream, host, opts.client_config)?;
 
                 Ok(Self::RustlsWithTimeout(Box::new(stream), timeout))
             }
-            Some(timeout) => {
-                let timeout = Timeout::start(&stream, timeout)?;
+            Some(deadline) => {
+                let timeout = Timeout::start(&stream, deadline)?;
 
                 Ok(Self::TcpWithTimeout(stream, timeout))
             }

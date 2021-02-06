@@ -16,7 +16,7 @@
 use std::io::ErrorKind;
 use std::net::TcpListener;
 use std::thread::{sleep, spawn};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use zeptohttpc::{http::Request, Error, Options, RequestBuilderExt, RequestExt};
 
@@ -32,7 +32,7 @@ fn fails_due_to_timeout() {
     });
 
     let mut opts = Options::default();
-    opts.timeout = Some(Duration::from_millis(100));
+    opts.deadline = Some(Instant::now() + Duration::from_millis(100));
 
     let res = Request::get(format!("http://localhost:{}", port))
         .empty()

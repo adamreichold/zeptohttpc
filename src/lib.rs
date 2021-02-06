@@ -16,14 +16,14 @@
 //! This crate aims to be the smallest possible yet practically useful HTTP client built on top of the `http` and `httparse` crates.
 //!
 //! ```
-//! # use std::{error::Error, time::Duration};
+//! # use std::{error::Error, time::{Duration, Instant}};
 //! use zeptohttpc::{http::Request, Options, RequestBuilderExt, RequestExt, ResponseExt};
 //!
 //! # fn main() -> Result<(), Box<dyn Error>> {
 //! let req = Request::get("http://httpbin.org/base64/emVwdG9odHRwYw%3D%3D").empty().unwrap();
 //!
 //! let mut opts = Options::default();
-//! opts.timeout = Some(Duration::from_secs(10));
+//! opts.deadline = Some(Instant::now() + Duration::from_secs(10));
 //!
 //! let resp = req.send_with_opts(opts).unwrap();
 //!
@@ -148,7 +148,7 @@ impl RequestBuilderExt for RequestBuilder {
 pub struct Options<'a> {
     pub connect_timeout: Duration,
     pub connect_delay: Duration,
-    pub timeout: Option<Duration>,
+    pub deadline: Option<Instant>,
     pub follow_redirects: Option<usize>,
     #[cfg(feature = "native-tls")]
     pub tls_connector: Option<&'a TlsConnector>,
@@ -162,7 +162,7 @@ impl Default for Options<'_> {
         Self {
             connect_timeout: Duration::from_secs(10),
             connect_delay: Duration::from_millis(500),
-            timeout: None,
+            deadline: None,
             follow_redirects: Some(5),
             #[cfg(feature = "native-tls")]
             tls_connector: None,
@@ -229,8 +229,6 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             }
         };
 
-        let mut start = Instant::now();
-
         loop {
             let scheme = parts.uri.scheme().ok_or(Error::MissingScheme)?;
             let authority = parts.uri.authority().ok_or(Error::MissingAuthority)?;
@@ -257,11 +255,7 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             write_request(&mut stream, &parts, &mut body, chunked)?;
             let resp = read_response(stream)?;
 
-            let now = Instant::now();
-            let elapsed = now.duration_since(start);
-            start = now;
-
-            if let Some(location) = handle_redirects(&resp, &mut opts, elapsed)? {
+            if let Some(location) = handle_redirects(&resp, &mut opts)? {
                 let uri = parts.uri.into_parts();
 
                 let mut location = location.into_parts();
@@ -396,11 +390,7 @@ fn read_response(stream: Stream) -> Result<Response<BodyReader>, Error> {
     resp.body(body).map_err(Error::from)
 }
 
-fn handle_redirects(
-    resp: &Response<BodyReader>,
-    opts: &mut Options,
-    elapsed: Duration,
-) -> Result<Option<Uri>, Error> {
+fn handle_redirects(resp: &Response<BodyReader>, opts: &mut Options) -> Result<Option<Uri>, Error> {
     if let Some(redirects) = &mut opts.follow_redirects {
         match resp.status().as_u16() {
             301 | 302 | 303 | 307 | 308 => {
@@ -409,14 +399,6 @@ fn handle_redirects(
                 }
 
                 *redirects -= 1;
-
-                if let Some(timeout) = &mut opts.timeout {
-                    if *timeout <= elapsed {
-                        return Err(Error::TooManyRedirects);
-                    }
-
-                    *timeout -= elapsed;
-                }
 
                 let location: Uri = resp
                     .headers()
