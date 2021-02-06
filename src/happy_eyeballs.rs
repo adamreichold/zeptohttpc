@@ -11,16 +11,19 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use std::io::ErrorKind::TimedOut;
 use std::net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs};
 use std::str::FromStr;
 use std::sync::mpsc::channel;
 use std::thread::spawn;
+use std::time::Instant;
 
 use super::{Error, Options};
 
 pub fn connect(host: &str, port: u16, opts: &Options) -> Result<TcpStream, Error> {
     let timeout = opts.connect_timeout;
     let delay = opts.connect_delay;
+    let deadline = opts.deadline;
 
     let mut addrs = resolve_addrs(host, port)?;
 
@@ -50,7 +53,14 @@ pub fn connect(host: &str, port: u16, opts: &Options) -> Result<TcpStream, Error
         let tx = tx.clone();
 
         spawn(move || {
-            let _ = tx.send(TcpStream::connect_timeout(&addr, timeout));
+            let res = match deadline.map(|deadline| deadline.checked_duration_since(Instant::now()))
+            {
+                None => TcpStream::connect_timeout(&addr, timeout),
+                Some(Some(timeout1)) => TcpStream::connect_timeout(&addr, timeout.min(timeout1)),
+                Some(None) => Err(TimedOut.into()),
+            };
+
+            let _ = tx.send(res);
         });
 
         if let Ok(res) = rx.recv_timeout(delay) {
