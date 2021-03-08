@@ -25,8 +25,8 @@ impl BodyReader {
         headers: Option<&HeaderMap>,
     ) -> Result<Self, Error> {
         if let Some(headers) = headers {
-            reader = compressed_reader(reader, headers)?;
             reader = chunked_reader(reader, headers)?;
+            reader = compressed_reader(reader, headers)?;
             reader = encoded_reader(reader, headers)?;
         }
 
@@ -50,6 +50,21 @@ impl Read for BodyReader {
     }
 }
 
+fn chunked_reader(
+    mut reader: Box<dyn BufRead + Send>,
+    headers: &HeaderMap,
+) -> Result<Box<dyn BufRead + Send>, Error> {
+    if let Some(encodings) = headers.get(TRANSFER_ENCODING) {
+        for encoding in split_encodings(encodings)? {
+            if encoding == "chunked" {
+                reader = Box::new(ChunkedReader::new(reader));
+            }
+        }
+    }
+
+    Ok(reader)
+}
+
 #[cfg(feature = "flate2")]
 fn compressed_reader(
     mut reader: Box<dyn BufRead + Send>,
@@ -66,16 +81,6 @@ fn compressed_reader(
 
     fn gzip_reader(reader: Box<dyn BufRead + Send>) -> Box<dyn BufRead + Send> {
         Box::new(BufReader::new(GzDecoder::new(reader)))
-    }
-
-    if let Some(encodings) = headers.get(TRANSFER_ENCODING) {
-        for encoding in split_encodings(encodings)? {
-            reader = match encoding.as_str() {
-                "deflate" => deflate_reader(reader),
-                "gzip" => gzip_reader(reader),
-                _ => reader,
-            };
-        }
     }
 
     if let Some(encodings) = headers.get(CONTENT_ENCODING) {
@@ -97,21 +102,6 @@ fn compressed_reader(
     reader: Box<dyn BufRead + Send>,
     _headers: &HeaderMap,
 ) -> Result<Box<dyn BufRead + Send>, Error> {
-    Ok(reader)
-}
-
-fn chunked_reader(
-    mut reader: Box<dyn BufRead + Send>,
-    headers: &HeaderMap,
-) -> Result<Box<dyn BufRead + Send>, Error> {
-    if let Some(encodings) = headers.get(TRANSFER_ENCODING) {
-        for encoding in split_encodings(encodings)? {
-            if encoding == "chunked" {
-                reader = Box::new(ChunkedReader::new(reader));
-            }
-        }
-    }
-
     Ok(reader)
 }
 
