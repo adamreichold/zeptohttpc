@@ -72,11 +72,11 @@ fn compressed_reader(
 ) -> Result<Box<dyn BufRead + Send>, Error> {
     use std::io::BufReader;
 
-    use flate2::bufread::{DeflateDecoder, GzDecoder};
+    use flate2::bufread::{GzDecoder, ZlibDecoder};
     use http::header::CONTENT_ENCODING;
 
     fn deflate_reader(reader: Box<dyn BufRead + Send>) -> Box<dyn BufRead + Send> {
-        Box::new(BufReader::new(DeflateDecoder::new(reader)))
+        Box::new(BufReader::new(ZlibDecoder::new(reader)))
     }
 
     fn gzip_reader(reader: Box<dyn BufRead + Send>) -> Box<dyn BufRead + Send> {
