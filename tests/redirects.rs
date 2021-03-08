@@ -88,7 +88,7 @@ fn fails_due_to_too_many_redirects() {
 }
 
 #[test]
-fn fails_due_to_missing_location() {
+fn location_is_recommended_but_not_required() {
     let mock = MockServer::start(vec![
         "HTTP/1.0 301 Moved Permanently\r\nContent-Length: 8\r\n\r\nnot here",
     ]);
@@ -96,9 +96,8 @@ fn fails_due_to_missing_location() {
     let res = Request::get(mock.uri()).empty().unwrap().send();
 
     match res {
-        Err(Error::MissingLocation) => (),
+        Ok(resp) => assert_eq!(resp.status().as_u16(), 301),
         Err(err) => panic!("Unexpected error: {}", err),
-        Ok(resp) => panic!("Unexpected response: {}", resp.status()),
     }
 }
 

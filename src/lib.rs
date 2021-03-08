@@ -258,11 +258,11 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             if let Some(location) = handle_redirects(&resp, &mut opts)? {
                 let uri = parts.uri.into_parts();
 
-                let mut location = location.into_parts();
+                let mut location = dbg!(location.into_parts());
                 location.scheme = location.scheme.or(uri.scheme);
                 location.authority = location.authority.or(uri.authority);
 
-                parts.uri = location.try_into()?;
+                parts.uri = dbg!(location.try_into()?);
                 continue;
             }
 
@@ -400,14 +400,9 @@ fn handle_redirects(resp: &Response<BodyReader>, opts: &mut Options) -> Result<O
 
                 *redirects -= 1;
 
-                let location: Uri = resp
-                    .headers()
-                    .get(LOCATION)
-                    .ok_or(Error::MissingLocation)?
-                    .to_str()?
-                    .parse()?;
-
-                return Ok(Some(location));
+                if let Some(location) = resp.headers().get(LOCATION) {
+                    return Ok(Some(location.to_str()?.parse()?));
+                }
             }
             _ => (),
         }
