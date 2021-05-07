@@ -13,8 +13,8 @@ jobs:
       with:
         profile: minimal
         toolchain: nightly
-        components: rustfmt, clippy
         override: true
+        components: rustfmt, clippy
     - uses: actions-rs/cargo@v1
       with:
         command: fmt
