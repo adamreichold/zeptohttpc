@@ -55,8 +55,6 @@ pub use rustls;
 pub use serde;
 #[cfg(feature = "json")]
 pub use serde_json;
-#[cfg(feature = "tls")]
-pub use webpki;
 
 pub use body_reader::BodyReader;
 pub use body_writer::{BodyKind, BodyWriter};

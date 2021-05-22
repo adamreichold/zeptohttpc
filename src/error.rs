@@ -34,7 +34,9 @@ pub enum Error {
     #[cfg(feature = "native-tls")]
     NativeTls(native_tls::Error),
     #[cfg(feature = "tls")]
-    InvalidDnsName(webpki::InvalidDNSNameError),
+    Tls(rustls::Error),
+    #[cfg(feature = "tls")]
+    InvalidDnsName(String),
     #[cfg(feature = "json")]
     Json(serde_json::Error),
 }
@@ -52,7 +54,7 @@ impl StdError for Error {
             #[cfg(feature = "native-tls")]
             Self::NativeTls(err) => Some(err),
             #[cfg(feature = "tls")]
-            Self::InvalidDnsName(err) => Some(err),
+            Self::Tls(err) => Some(err),
             #[cfg(feature = "json")]
             Self::Json(err) => Some(err),
             _ => None,
@@ -80,7 +82,9 @@ impl fmt::Display for Error {
             #[cfg(feature = "native-tls")]
             Self::NativeTls(err) => write!(fmt, "TLS error: {}", err),
             #[cfg(feature = "tls")]
-            Self::InvalidDnsName(err) => write!(fmt, "Invalid DNS name: {}", err),
+            Self::Tls(err) => write!(fmt, "TLS error: {}", err),
+            #[cfg(feature = "tls")]
+            Self::InvalidDnsName(name) => write!(fmt, "Invalid DNS name: {}", name),
             #[cfg(feature = "json")]
             Self::Json(err) => write!(fmt, "JSON error: {}", err),
         }
@@ -143,9 +147,9 @@ impl From<native_tls::Error> for Error {
 }
 
 #[cfg(feature = "tls")]
-impl From<webpki::InvalidDNSNameError> for Error {
-    fn from(err: webpki::InvalidDNSNameError) -> Self {
-        Self::InvalidDnsName(err)
+impl From<rustls::Error> for Error {
+    fn from(err: rustls::Error) -> Self {
+        Self::Tls(err)
     }
 }
 

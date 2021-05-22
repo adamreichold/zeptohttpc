@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #[cfg(feature = "tls")]
+use std::convert::TryInto;
+#[cfg(feature = "tls")]
 use std::io::ErrorKind::{ConnectionAborted, WouldBlock};
 use std::io::{Read, Result as IoResult, Write};
 use std::net::TcpStream;
@@ -23,9 +25,7 @@ use http::uri::Scheme;
 #[cfg(feature = "native-tls")]
 use native_tls::{HandshakeError, TlsConnector, TlsStream};
 #[cfg(feature = "tls")]
-use rustls::{ClientConfig, ClientSession, Session, StreamOwned};
-#[cfg(feature = "tls")]
-use webpki::DNSNameRef;
+use rustls::{ClientConfig, ClientConnection, OwnedTrustAnchor, RootCertStore, StreamOwned};
 #[cfg(feature = "tls")]
 use webpki_roots::TLS_SERVER_ROOTS;
 
@@ -39,9 +39,9 @@ pub enum Stream {
     #[cfg(feature = "native-tls")]
     NativeTlsWithTimeout(TlsStream<TcpStream>, Timeout),
     #[cfg(feature = "tls")]
-    Rustls(Box<StreamOwned<ClientSession, TcpStream>>),
+    Rustls(Box<StreamOwned<ClientConnection, TcpStream>>),
     #[cfg(feature = "tls")]
-    RustlsWithTimeout(Box<StreamOwned<ClientSession, TcpStream>>, Timeout),
+    RustlsWithTimeout(Box<StreamOwned<ClientConnection, TcpStream>>, Timeout),
 }
 
 impl Stream {
@@ -119,29 +119,39 @@ fn perform_rustls_handshake(
     mut stream: TcpStream,
     host: &str,
     client_config: Option<&Arc<ClientConfig>>,
-) -> Result<StreamOwned<ClientSession, TcpStream>, Error> {
-    let name = DNSNameRef::try_from_ascii_str(host)?;
+) -> Result<StreamOwned<ClientConnection, TcpStream>, Error> {
+    let name = host
+        .try_into()
+        .map_err(|_| Error::InvalidDnsName(host.to_owned()))?;
 
-    let mut session = match client_config {
-        Some(client_config) => ClientSession::new(client_config, name),
+    let mut conn = match client_config {
+        Some(client_config) => ClientConnection::new(client_config.clone(), name)?,
         None => {
-            let mut client_config = ClientConfig::new();
+            let mut root_store = RootCertStore::empty();
+            root_store.add_server_trust_anchors(TLS_SERVER_ROOTS.0.iter().map(|root| {
+                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    root.subject,
+                    root.spki,
+                    root.name_constraints,
+                )
+            }));
 
-            client_config
-                .root_store
-                .add_server_trust_anchors(&TLS_SERVER_ROOTS);
+            let client_config = ClientConfig::builder()
+                .with_safe_defaults()
+                .with_root_certificates(root_store)
+                .with_no_client_auth();
 
-            ClientSession::new(&Arc::new(client_config), name)
+            ClientConnection::new(Arc::new(client_config), name)?
         }
     };
 
-    while let Err(err) = session.complete_io(&mut stream) {
-        if err.kind() != WouldBlock || !session.is_handshaking() {
+    while let Err(err) = conn.complete_io(&mut stream) {
+        if err.kind() != WouldBlock || !conn.is_handshaking() {
             return Err(err.into());
         }
     }
 
-    Ok(StreamOwned::new(session, stream))
+    Ok(StreamOwned::new(conn, stream))
 }
 
 impl Read for Stream {
@@ -192,12 +202,12 @@ impl Write for Stream {
 #[cfg(feature = "tls")]
 fn handle_close_notify(
     res: IoResult<usize>,
-    stream: &mut StreamOwned<ClientSession, TcpStream>,
+    stream: &mut StreamOwned<ClientConnection, TcpStream>,
 ) -> IoResult<usize> {
     match res {
         Err(err) if err.kind() == ConnectionAborted => {
-            stream.sess.send_close_notify();
-            stream.sess.complete_io(&mut stream.sock)?;
+            stream.conn.send_close_notify();
+            stream.conn.complete_io(&mut stream.sock)?;
 
             Ok(0)
         }
