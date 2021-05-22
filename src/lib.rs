@@ -363,7 +363,7 @@ fn read_response(stream: Stream) -> Result<Response<BodyReader>, Error> {
         let mut headers = [EMPTY_HEADER; MAX_HEADERS];
         let mut parser = ResponseParser::new(&mut headers);
 
-        match parser.parse(&buf)? {
+        match parser.parse(buf)? {
             Complete(parsed) => {
                 let mut resp = Response::builder();
 
