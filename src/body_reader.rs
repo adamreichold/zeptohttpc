@@ -116,6 +116,7 @@ fn encoded_reader(
     use super::encoded::EncodedReader;
 
     if let Some(type_) = headers.get(CONTENT_TYPE) {
+        #[allow(clippy::manual_split_once)]
         if let Some(charset) = type_.to_str()?.splitn(2, "charset=").nth(1) {
             if let Some(encoding) = Encoding::for_label(charset.as_bytes()) {
                 reader = Box::new(EncodedReader::new(reader, encoding));

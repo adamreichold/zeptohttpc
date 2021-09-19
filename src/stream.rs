@@ -51,7 +51,7 @@ impl Stream {
         port: u16,
         opts: &Options,
     ) -> Result<Self, Error> {
-        let stream = connect(host, port, &opts)?;
+        let stream = connect(host, port, opts)?;
 
         match opts.deadline {
             #[cfg(feature = "native-tls")]

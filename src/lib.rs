@@ -258,11 +258,11 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             if let Some(location) = handle_redirects(&resp, &mut opts)? {
                 let uri = parts.uri.into_parts();
 
-                let mut location = dbg!(location.into_parts());
+                let mut location = location.into_parts();
                 location.scheme = location.scheme.or(uri.scheme);
                 location.authority = location.authority.or(uri.authority);
 
-                parts.uri = dbg!(location.try_into()?);
+                parts.uri = location.try_into()?;
                 continue;
             }
 
@@ -363,7 +363,7 @@ fn read_response(stream: Stream) -> Result<Response<BodyReader>, Error> {
         let mut headers = [EMPTY_HEADER; MAX_HEADERS];
         let mut parser = ResponseParser::new(&mut headers);
 
-        match parser.parse(&buf)? {
+        match parser.parse(buf)? {
             Complete(parsed) => {
                 let mut resp = Response::builder();
 
