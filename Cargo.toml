@@ -4,6 +4,7 @@ description = "minimal HTTP client using http and httparse crates"
 version = "0.5.0"
 authors = ["Adam Reichold <adam.reichold@t-online.de>"]
 edition = "2018"
+rust-version = "1.51"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 documentation = "https://docs.rs/zeptohttpc"
