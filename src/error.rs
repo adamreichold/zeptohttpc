@@ -24,6 +24,8 @@ pub enum Error {
     TooManyRedirects,
     InvalidChunkSize,
     InvalidLineEnding,
+    #[cfg(feature = "rustls")]
+    MissingTlsRoots,
     Io(io::Error),
     Http(http::Error),
     HttpInvalidUri(http::uri::InvalidUri),
@@ -72,6 +74,8 @@ impl fmt::Display for Error {
             Self::TooManyRedirects => write!(fmt, "Too many redirects"),
             Self::InvalidChunkSize => write!(fmt, "Invalid chunk size"),
             Self::InvalidLineEnding => write!(fmt, "Invalid line ending"),
+            #[cfg(feature = "rustls")]
+            Self::MissingTlsRoots => write!(fmt, "Missing TLS roots"),
             Self::Io(err) => write!(fmt, "I/O error: {}", err),
             Self::Http(err) => write!(fmt, "HTTP error: {}", err),
             Self::HttpInvalidUri(err) => write!(fmt, "HTTP invalid URI: {}", err),

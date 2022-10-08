@@ -25,11 +25,11 @@ use http::uri::Scheme;
 #[cfg(feature = "native-tls")]
 use native_tls::{HandshakeError, TlsConnector, TlsStream};
 #[cfg(feature = "rustls-native-certs")]
-use rustls::Certificate;
-#[cfg(feature = "webpki-roots")]
-use rustls::OwnedTrustAnchor;
+use rustls::{Certificate, RootCertStore};
 #[cfg(feature = "rustls")]
-use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
+use rustls::{ClientConfig, ClientConnection, StreamOwned};
+#[cfg(feature = "webpki-roots")]
+use rustls::{OwnedTrustAnchor, RootCertStore};
 #[cfg(feature = "rustls-native-certs")]
 use rustls_native_certs::load_native_certs;
 #[cfg(feature = "webpki-roots")]
@@ -120,7 +120,7 @@ fn perform_native_tls_handshake(
     }
 }
 
-#[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
+#[cfg(feature = "rustls")]
 fn perform_rustls_handshake(
     mut stream: TcpStream,
     host: &str,
@@ -132,6 +132,7 @@ fn perform_rustls_handshake(
 
     let mut conn = match client_config {
         Some(client_config) => ClientConnection::new(client_config.clone(), name)?,
+        #[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
         None => {
             let mut root_store = RootCertStore::empty();
 
@@ -156,6 +157,8 @@ fn perform_rustls_handshake(
 
             ClientConnection::new(Arc::new(client_config), name)?
         }
+        #[cfg(not(any(feature = "webpki-roots", feature = "rustls-native-certs")))]
+        None => return Err(Error::MissingTlsRoots),
     };
 
     while let Err(err) = conn.complete_io(&mut stream) {
