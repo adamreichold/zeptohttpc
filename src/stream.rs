@@ -24,12 +24,16 @@ use std::sync::Arc;
 use http::uri::Scheme;
 #[cfg(feature = "native-tls")]
 use native_tls::{HandshakeError, TlsConnector, TlsStream};
+#[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
+use once_cell::sync::Lazy;
 #[cfg(feature = "rustls-native-certs")]
-use rustls::{Certificate, RootCertStore};
+use rustls::Certificate;
+#[cfg(feature = "webpki-roots")]
+use rustls::OwnedTrustAnchor;
+#[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
+use rustls::RootCertStore;
 #[cfg(feature = "rustls")]
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
-#[cfg(feature = "webpki-roots")]
-use rustls::{OwnedTrustAnchor, RootCertStore};
 #[cfg(feature = "rustls-native-certs")]
 use rustls_native_certs::load_native_certs;
 #[cfg(feature = "webpki-roots")]
@@ -134,28 +138,32 @@ fn perform_rustls_handshake(
         Some(client_config) => ClientConnection::new(client_config.clone(), name)?,
         #[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
         None => {
-            let mut root_store = RootCertStore::empty();
+            static CLIENT_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
+                let mut root_store = RootCertStore::empty();
 
-            #[cfg(feature = "webpki-roots")]
-            root_store.add_server_trust_anchors(TLS_SERVER_ROOTS.0.iter().map(|root| {
-                OwnedTrustAnchor::from_subject_spki_name_constraints(
-                    root.subject,
-                    root.spki,
-                    root.name_constraints,
-                )
-            }));
+                #[cfg(feature = "webpki-roots")]
+                root_store.add_server_trust_anchors(TLS_SERVER_ROOTS.0.iter().map(|root| {
+                    OwnedTrustAnchor::from_subject_spki_name_constraints(
+                        root.subject,
+                        root.spki,
+                        root.name_constraints,
+                    )
+                }));
 
-            #[cfg(feature = "rustls-native-certs")]
-            for cert in load_native_certs()? {
-                root_store.add(&Certificate(cert.0)).unwrap();
-            }
+                #[cfg(feature = "rustls-native-certs")]
+                for cert in load_native_certs().expect("Failed to load native roots") {
+                    root_store.add(&Certificate(cert.0)).unwrap();
+                }
 
-            let client_config = ClientConfig::builder()
-                .with_safe_defaults()
-                .with_root_certificates(root_store)
-                .with_no_client_auth();
+                let client_config = ClientConfig::builder()
+                    .with_safe_defaults()
+                    .with_root_certificates(root_store)
+                    .with_no_client_auth();
 
-            ClientConnection::new(Arc::new(client_config), name)?
+                Arc::new(client_config)
+            });
+
+            ClientConnection::new(CLIENT_CONFIG.clone(), name)?
         }
         #[cfg(not(any(feature = "webpki-roots", feature = "rustls-native-certs")))]
         None => return Err(Error::MissingTlsRoots),
