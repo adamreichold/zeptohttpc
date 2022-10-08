@@ -66,7 +66,7 @@ pub fn connect(host: &str, port: u16, opts: &Options) -> Result<TcpStream, Error
         if let Ok(res) = rx.recv_timeout(delay) {
             match res {
                 Ok(stream) => return Ok(stream),
-                Err(err) => first_err = first_err.or(Some(err)),
+                Err(err) => first_err = first_err.or_else(|| Some(err)),
             }
         }
     }
@@ -76,7 +76,7 @@ pub fn connect(host: &str, port: u16, opts: &Options) -> Result<TcpStream, Error
     for res in rx.iter() {
         match res {
             Ok(stream) => return Ok(stream),
-            Err(err) => first_err = first_err.or(Some(err)),
+            Err(err) => first_err = first_err.or_else(|| Some(err)),
         }
     }
 

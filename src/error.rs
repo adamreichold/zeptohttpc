@@ -33,9 +33,9 @@ pub enum Error {
     Httparse(httparse::Error),
     #[cfg(feature = "native-tls")]
     NativeTls(native_tls::Error),
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "rustls")]
     Tls(rustls::Error),
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "rustls")]
     InvalidDnsName(String),
     #[cfg(feature = "json")]
     Json(serde_json::Error),
@@ -53,7 +53,7 @@ impl StdError for Error {
             Self::Httparse(err) => Some(err),
             #[cfg(feature = "native-tls")]
             Self::NativeTls(err) => Some(err),
-            #[cfg(feature = "tls")]
+            #[cfg(feature = "rustls")]
             Self::Tls(err) => Some(err),
             #[cfg(feature = "json")]
             Self::Json(err) => Some(err),
@@ -81,9 +81,9 @@ impl fmt::Display for Error {
             Self::Httparse(err) => write!(fmt, "HTTP parser error: {}", err),
             #[cfg(feature = "native-tls")]
             Self::NativeTls(err) => write!(fmt, "TLS error: {}", err),
-            #[cfg(feature = "tls")]
+            #[cfg(feature = "rustls")]
             Self::Tls(err) => write!(fmt, "TLS error: {}", err),
-            #[cfg(feature = "tls")]
+            #[cfg(feature = "rustls")]
             Self::InvalidDnsName(name) => write!(fmt, "Invalid DNS name: {}", name),
             #[cfg(feature = "json")]
             Self::Json(err) => write!(fmt, "JSON error: {}", err),
@@ -146,7 +146,7 @@ impl From<native_tls::Error> for Error {
     }
 }
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "rustls")]
 impl From<rustls::Error> for Error {
     fn from(err: rustls::Error) -> Self {
         Self::Tls(err)

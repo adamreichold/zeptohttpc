@@ -49,7 +49,7 @@ pub use http;
 pub use httparse;
 #[cfg(feature = "native-tls")]
 pub use native_tls;
-#[cfg(feature = "tls")]
+#[cfg(feature = "rustls")]
 pub use rustls;
 #[cfg(feature = "json")]
 pub use serde;
@@ -63,7 +63,7 @@ pub use error::Error;
 use std::convert::TryInto;
 use std::io::{BufReader, BufWriter, Read, Result as IoResult, Seek, Write};
 use std::marker::PhantomData;
-#[cfg(feature = "tls")]
+#[cfg(feature = "rustls")]
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -84,7 +84,7 @@ use httparse::{
 };
 #[cfg(feature = "native-tls")]
 use native_tls::TlsConnector;
-#[cfg(feature = "tls")]
+#[cfg(feature = "rustls")]
 use rustls::ClientConfig;
 #[cfg(feature = "json")]
 use serde::{de::DeserializeOwned, ser::Serialize};
@@ -150,7 +150,7 @@ pub struct Options<'a> {
     pub follow_redirects: Option<usize>,
     #[cfg(feature = "native-tls")]
     pub tls_connector: Option<&'a TlsConnector>,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "rustls")]
     pub client_config: Option<&'a Arc<ClientConfig>>,
     _private: PhantomData<&'a ()>,
 }
@@ -164,7 +164,7 @@ impl Default for Options<'_> {
             follow_redirects: Some(5),
             #[cfg(feature = "native-tls")]
             tls_connector: None,
-            #[cfg(feature = "tls")]
+            #[cfg(feature = "rustls")]
             client_config: None,
             _private: PhantomData,
         }
@@ -237,13 +237,13 @@ impl<B: BodyWriter> RequestExt for Request<B> {
             let port = match authority.port_u16() {
                 Some(port) => port,
                 None if scheme == &Scheme::HTTP => 80,
-                #[cfg(any(feature = "native-tls", feature = "tls"))]
+                #[cfg(any(feature = "native-tls", feature = "rustls"))]
                 None if scheme == &Scheme::HTTPS => 443,
                 _ => return Err(Error::UnsupportedProtocol),
             };
 
             let mut stream = Stream::new(
-                #[cfg(any(feature = "native-tls", feature = "tls"))]
+                #[cfg(any(feature = "native-tls", feature = "rustls"))]
                 scheme,
                 host,
                 port,

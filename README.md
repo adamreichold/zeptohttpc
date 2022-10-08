@@ -8,7 +8,7 @@ This crate aims to be the smallest possible yet practically useful HTTP client b
 * `flate2`: Support for compressed bodies using the [`flate2`](https://docs.rs/flate2) crate.
 * `native-tls`: Support HTTPS connections using the [`native-tls`](https://docs.rs/native-tls) crate.
 * `json`: Support for JSON bodies using the [`serde`](https://docs.rs/serde) and [`serde_json`](https://docs.rs/serde_json) crates.
-* `tls`: Support for HTTPS connections using the [`rustls`](https://docs.rs/rustls), [`webpki`](https://docs.rs/webpki) and [`webpki-roots`](https://docs.rs/webpki-roots) crates.
+* `tls-webpki-roots` or `tls-native-roots`: Support for HTTPS connections using the [`rustls`](https://docs.rs/rustls) and [`webpki-roots`](https://docs.rs/webpki-roots) or [`rustls-native-certs`](https://docs.rs/rustls-native-certs) crates.
 
 ## License
 
