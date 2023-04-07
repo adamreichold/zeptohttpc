@@ -38,7 +38,7 @@ pub enum Error {
     #[cfg(feature = "rustls")]
     Tls(rustls::Error),
     #[cfg(feature = "rustls")]
-    InvalidDnsName(String),
+    InvalidServerName(String),
     #[cfg(feature = "json")]
     Json(serde_json::Error),
 }
@@ -88,7 +88,7 @@ impl fmt::Display for Error {
             #[cfg(feature = "rustls")]
             Self::Tls(err) => write!(fmt, "TLS error: {}", err),
             #[cfg(feature = "rustls")]
-            Self::InvalidDnsName(name) => write!(fmt, "Invalid DNS name: {}", name),
+            Self::InvalidServerName(name) => write!(fmt, "Invalid server name: {}", name),
             #[cfg(feature = "json")]
             Self::Json(err) => write!(fmt, "JSON error: {}", err),
         }

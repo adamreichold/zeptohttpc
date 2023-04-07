@@ -132,7 +132,7 @@ fn perform_rustls_handshake(
 ) -> Result<StreamOwned<ClientConnection, TcpStream>, Error> {
     let name = host
         .try_into()
-        .map_err(|_| Error::InvalidDnsName(host.to_owned()))?;
+        .map_err(|_| Error::InvalidServerName(host.to_owned()))?;
 
     let mut conn = match client_config {
         Some(client_config) => ClientConnection::new(client_config.clone(), name)?,
