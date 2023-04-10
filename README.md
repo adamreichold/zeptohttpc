@@ -1,5 +1,9 @@
 # zeptohttpc
 
+[![crates.io](https://img.shields.io/crates/v/zeptohttpc.svg)](https://crates.io/crates/zeptohttpc)
+[![docs.rs](https://docs.rs/zeptohttpc/badge.svg)](https://docs.rs/zeptohttpc)
+[![github.com](https://github.com/adamreichold/zeptohttpc/actions/workflows/test.yaml/badge.svg)](https://github.com/adamreichold/zeptohttpc/actions/workflows/test.yaml)
+
 This crate aims to be the smallest possible yet practically useful HTTP client built on top of the [`http`](https://docs.rs/http) and [`httparse`](https://docs.rs/httparse) crates.
 
 ## Cargo features
