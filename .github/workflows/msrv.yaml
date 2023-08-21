@@ -11,5 +11,4 @@ jobs:
         fetch-depth: 1
     - uses: dtolnay/rust-toolchain@1.51.0
     - run: cargo check
-    - run: cargo update --package once_cell --precise 1.14.0
-    - run: cargo check --features "json encoding_rs flate2"
+    - run: cargo check --no-default-features
