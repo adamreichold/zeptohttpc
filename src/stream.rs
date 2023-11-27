@@ -16,6 +16,7 @@ use std::convert::TryInto;
 #[cfg(feature = "rustls")]
 use std::io::ErrorKind::{ConnectionAborted, WouldBlock};
 use std::io::{Read, Result as IoResult, Write};
+#[cfg(any(feature = "native-tls", feature = "rustls"))]
 use std::net::TcpStream;
 #[cfg(feature = "rustls")]
 use std::sync::Arc;
@@ -41,17 +42,26 @@ use webpki_roots::TLS_SERVER_ROOTS;
 
 use super::{happy_eyeballs::connect, timeout::Timeout, Error, Options};
 
-pub enum Stream {
-    Tcp(TcpStream),
-    TcpWithTimeout(TcpStream, Timeout),
-    #[cfg(feature = "native-tls")]
-    NativeTls(TlsStream<TcpStream>),
-    #[cfg(feature = "native-tls")]
-    NativeTlsWithTimeout(TlsStream<TcpStream>, Timeout),
-    #[cfg(feature = "rustls")]
-    Rustls(Box<StreamOwned<ClientConnection, TcpStream>>),
-    #[cfg(feature = "rustls")]
-    RustlsWithTimeout(Box<StreamOwned<ClientConnection, TcpStream>>, Timeout),
+pub struct Stream(Box<dyn Inner>);
+
+trait Inner: Read + Write + Send {}
+
+impl<S> Inner for S where S: Read + Write + Send {}
+
+impl Read for Stream {
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        self.0.read(buf)
+    }
+}
+
+impl Write for Stream {
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> IoResult<()> {
+        self.0.flush()
+    }
 }
 
 impl Stream {
@@ -63,40 +73,66 @@ impl Stream {
     ) -> Result<Self, Error> {
         let stream = connect(host, port, opts)?;
 
-        match opts.deadline {
+        let inner: Box<dyn Inner> = match opts.deadline {
             #[cfg(feature = "native-tls")]
             None if scheme == &Scheme::HTTPS => {
                 let stream = perform_native_tls_handshake(stream, host, opts.tls_connector)?;
 
-                Ok(Self::NativeTls(stream))
+                Box::new(stream)
             }
             #[cfg(feature = "rustls")]
             None if scheme == &Scheme::HTTPS => {
                 let stream = perform_rustls_handshake(stream, host, opts.client_config)?;
 
-                Ok(Self::Rustls(Box::new(stream)))
+                Box::new(HandleCloseNotify(stream))
             }
-            None => Ok(Self::Tcp(stream)),
+            None => Box::new(stream),
             #[cfg(feature = "native-tls")]
             Some(deadline) if scheme == &Scheme::HTTPS => {
                 let timeout = Timeout::start(&stream, deadline)?;
                 let stream = perform_native_tls_handshake(stream, host, opts.tls_connector)?;
 
-                Ok(Self::NativeTlsWithTimeout(stream, timeout))
+                Box::new(WithTimeout(stream, timeout))
             }
             #[cfg(feature = "rustls")]
             Some(deadline) if scheme == &Scheme::HTTPS => {
                 let timeout = Timeout::start(&stream, deadline)?;
                 let stream = perform_rustls_handshake(stream, host, opts.client_config)?;
 
-                Ok(Self::RustlsWithTimeout(Box::new(stream), timeout))
+                Box::new(WithTimeout(HandleCloseNotify(stream), timeout))
             }
             Some(deadline) => {
                 let timeout = Timeout::start(&stream, deadline)?;
 
-                Ok(Self::TcpWithTimeout(stream, timeout))
+                Box::new(WithTimeout(stream, timeout))
             }
-        }
+        };
+
+        Ok(Self(inner))
+    }
+}
+
+struct WithTimeout<S>(S, Timeout);
+
+impl<S> Read for WithTimeout<S>
+where
+    S: Read,
+{
+    fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        self.1.read(&mut self.0, buf)
+    }
+}
+
+impl<S> Write for WithTimeout<S>
+where
+    S: Write,
+{
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> IoResult<()> {
+        self.0.flush()
     }
 }
 
@@ -178,63 +214,33 @@ fn perform_rustls_handshake(
     Ok(StreamOwned::new(conn, stream))
 }
 
-impl Read for Stream {
+#[cfg(feature = "rustls")]
+struct HandleCloseNotify(StreamOwned<ClientConnection, TcpStream>);
+
+#[cfg(feature = "rustls")]
+impl Read for HandleCloseNotify {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
-        match self {
-            Self::Tcp(stream) => stream.read(buf),
-            Self::TcpWithTimeout(stream, timeout) => timeout.read(stream, buf),
-            #[cfg(feature = "native-tls")]
-            Self::NativeTls(stream) => stream.read(buf),
-            #[cfg(feature = "native-tls")]
-            Self::NativeTlsWithTimeout(stream, timeout) => timeout.read(stream, buf),
-            #[cfg(feature = "rustls")]
-            Self::Rustls(stream) => {
-                let res = stream.read(buf);
-                handle_close_notify(res, stream)
-            }
-            #[cfg(feature = "rustls")]
-            Self::RustlsWithTimeout(stream, timeout) => {
-                let res = timeout.read(stream, buf);
-                handle_close_notify(res, stream)
-            }
-        }
-    }
-}
+        let res = self.0.read(buf);
 
-impl Write for Stream {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        match self {
-            Self::Tcp(stream) | Self::TcpWithTimeout(stream, _) => stream.write(buf),
-            #[cfg(feature = "native-tls")]
-            Self::NativeTls(stream) | Self::NativeTlsWithTimeout(stream, _) => stream.write(buf),
-            #[cfg(feature = "rustls")]
-            Self::Rustls(stream) | Self::RustlsWithTimeout(stream, _) => stream.write(buf),
-        }
-    }
+        match res {
+            Err(err) if err.kind() == ConnectionAborted => {
+                self.0.conn.send_close_notify();
+                self.0.conn.complete_io(&mut self.0.sock)?;
 
-    fn flush(&mut self) -> IoResult<()> {
-        match self {
-            Self::Tcp(stream) | Self::TcpWithTimeout(stream, _) => stream.flush(),
-            #[cfg(feature = "native-tls")]
-            Self::NativeTls(stream) | Self::NativeTlsWithTimeout(stream, _) => stream.flush(),
-            #[cfg(feature = "rustls")]
-            Self::Rustls(stream) | Self::RustlsWithTimeout(stream, _) => stream.flush(),
+                Ok(0)
+            }
+            res => res,
         }
     }
 }
 
 #[cfg(feature = "rustls")]
-fn handle_close_notify(
-    res: IoResult<usize>,
-    stream: &mut StreamOwned<ClientConnection, TcpStream>,
-) -> IoResult<usize> {
-    match res {
-        Err(err) if err.kind() == ConnectionAborted => {
-            stream.conn.send_close_notify();
-            stream.conn.complete_io(&mut stream.sock)?;
+impl Write for HandleCloseNotify {
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        self.0.write(buf)
+    }
 
-            Ok(0)
-        }
-        res => res,
+    fn flush(&mut self) -> IoResult<()> {
+        self.0.flush()
     }
 }
