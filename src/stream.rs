@@ -180,9 +180,9 @@ fn perform_rustls_handshake(
                 #[cfg(feature = "webpki-roots")]
                 root_store.add_trust_anchors(TLS_SERVER_ROOTS.iter().map(|root| {
                     OwnedTrustAnchor::from_subject_spki_name_constraints(
-                        root.subject,
-                        root.spki,
-                        root.name_constraints,
+                        &*root.subject,
+                        &*root.subject_public_key_info,
+                        root.name_constraints.as_deref(),
                     )
                 }));
 
