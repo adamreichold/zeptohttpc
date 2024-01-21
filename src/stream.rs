@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #[cfg(feature = "rustls")]
-use std::convert::TryInto;
+use std::convert::TryFrom;
 #[cfg(feature = "rustls")]
 use std::io::ErrorKind::{ConnectionAborted, WouldBlock};
 use std::io::{Read, Result as IoResult, Write};
@@ -27,14 +27,10 @@ use http::uri::Scheme;
 use native_tls::{HandshakeError, TlsConnector, TlsStream};
 #[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
 use once_cell::sync::Lazy;
-#[cfg(feature = "rustls-native-certs")]
-use rustls::Certificate;
-#[cfg(feature = "webpki-roots")]
-use rustls::OwnedTrustAnchor;
 #[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
 use rustls::RootCertStore;
 #[cfg(feature = "rustls")]
-use rustls::{ClientConfig, ClientConnection, StreamOwned};
+use rustls::{pki_types::ServerName, ClientConfig, ClientConnection, StreamOwned};
 #[cfg(feature = "rustls-native-certs")]
 use rustls_native_certs::load_native_certs;
 #[cfg(feature = "webpki-roots")]
@@ -166,44 +162,37 @@ fn perform_rustls_handshake(
     host: &str,
     client_config: Option<&Arc<ClientConfig>>,
 ) -> Result<StreamOwned<ClientConnection, TcpStream>, Error> {
-    let name = host
-        .try_into()
-        .map_err(|_| Error::InvalidServerName(host.to_owned()))?;
+    let name = ServerName::try_from(host).map_err(|_| Error::InvalidServerName(host.to_owned()))?;
 
-    let mut conn = match client_config {
-        Some(client_config) => ClientConnection::new(client_config.clone(), name)?,
+    let client_config = match client_config {
+        Some(client_config) => client_config.clone(),
         #[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
         None => {
             static CLIENT_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
                 let mut root_store = RootCertStore::empty();
 
                 #[cfg(feature = "webpki-roots")]
-                root_store.add_trust_anchors(TLS_SERVER_ROOTS.iter().map(|root| {
-                    OwnedTrustAnchor::from_subject_spki_name_constraints(
-                        &*root.subject,
-                        &*root.subject_public_key_info,
-                        root.name_constraints.as_deref(),
-                    )
-                }));
+                root_store.extend(TLS_SERVER_ROOTS.iter().cloned());
 
                 #[cfg(feature = "rustls-native-certs")]
                 for cert in load_native_certs().expect("Failed to load native roots") {
-                    root_store.add(&Certificate(cert.0)).unwrap();
+                    root_store.add(cert).expect("Failed to add native root");
                 }
 
                 let client_config = ClientConfig::builder()
-                    .with_safe_defaults()
                     .with_root_certificates(root_store)
                     .with_no_client_auth();
 
                 Arc::new(client_config)
             });
 
-            ClientConnection::new(CLIENT_CONFIG.clone(), name)?
+            CLIENT_CONFIG.clone()
         }
         #[cfg(not(any(feature = "webpki-roots", feature = "rustls-native-certs")))]
         None => return Err(Error::MissingTlsRoots),
     };
+
+    let mut conn = ClientConnection::new(client_config, name.to_owned())?;
 
     while let Err(err) = conn.complete_io(&mut stream) {
         if err.kind() != WouldBlock || !conn.is_handshaking() {
