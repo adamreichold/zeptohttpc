@@ -14,7 +14,7 @@
 #[cfg(feature = "rustls")]
 use std::convert::TryFrom;
 #[cfg(feature = "rustls")]
-use std::io::ErrorKind::{ConnectionAborted, WouldBlock};
+use std::io::ErrorKind::{UnexpectedEof, WouldBlock};
 use std::io::{Read, Result as IoResult, Write};
 #[cfg(any(feature = "native-tls", feature = "rustls"))]
 use std::net::TcpStream;
@@ -25,15 +25,15 @@ use std::sync::Arc;
 use http::uri::Scheme;
 #[cfg(feature = "native-tls")]
 use native_tls::{HandshakeError, TlsConnector, TlsStream};
-#[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
+#[cfg(any(feature = "tls-webpki-roots", feature = "tls-native-roots"))]
 use once_cell::sync::Lazy;
-#[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
+#[cfg(any(feature = "tls-webpki-roots", feature = "tls-native-roots"))]
 use rustls::RootCertStore;
 #[cfg(feature = "rustls")]
 use rustls::{pki_types::ServerName, ClientConfig, ClientConnection, StreamOwned};
-#[cfg(feature = "rustls-native-certs")]
+#[cfg(feature = "tls-native-roots")]
 use rustls_native_certs::load_native_certs;
-#[cfg(feature = "webpki-roots")]
+#[cfg(feature = "tls-webpki-roots")]
 use webpki_roots::TLS_SERVER_ROOTS;
 
 use super::{happy_eyeballs::connect, timeout::Timeout, Error, Options};
@@ -166,15 +166,15 @@ fn perform_rustls_handshake(
 
     let client_config = match client_config {
         Some(client_config) => client_config.clone(),
-        #[cfg(any(feature = "webpki-roots", feature = "rustls-native-certs"))]
+        #[cfg(any(feature = "tls-webpki-roots", feature = "tls-native-roots"))]
         None => {
             static CLIENT_CONFIG: Lazy<Arc<ClientConfig>> = Lazy::new(|| {
                 let mut root_store = RootCertStore::empty();
 
-                #[cfg(feature = "webpki-roots")]
+                #[cfg(feature = "tls-webpki-roots")]
                 root_store.extend(TLS_SERVER_ROOTS.iter().cloned());
 
-                #[cfg(feature = "rustls-native-certs")]
+                #[cfg(feature = "tls-native-roots")]
                 for cert in load_native_certs().expect("Failed to load native roots") {
                     root_store.add(cert).expect("Failed to add native root");
                 }
@@ -188,7 +188,7 @@ fn perform_rustls_handshake(
 
             CLIENT_CONFIG.clone()
         }
-        #[cfg(not(any(feature = "webpki-roots", feature = "rustls-native-certs")))]
+        #[cfg(not(any(feature = "tls-webpki-roots", feature = "tls-native-roots")))]
         None => return Err(Error::MissingTlsRoots),
     };
 
@@ -212,7 +212,7 @@ impl Read for HandleCloseNotify {
         let res = self.0.read(buf);
 
         match res {
-            Err(err) if err.kind() == ConnectionAborted => {
+            Err(err) if err.kind() == UnexpectedEof => {
                 self.0.conn.send_close_notify();
                 self.0.conn.complete_io(&mut self.0.sock)?;
 
