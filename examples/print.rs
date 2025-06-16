@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let resp = Request::get(uri).empty()?.send_with_opts(opts)?;
 
     for (name, value) in resp.headers() {
-        eprintln!("{}: {:?}", name, value);
+        eprintln!("{name}: {value:?}");
     }
 
     eprintln!();

@@ -76,21 +76,21 @@ impl fmt::Display for Error {
             Self::InvalidLineEnding => write!(fmt, "Invalid line ending"),
             #[cfg(feature = "rustls")]
             Self::MissingTlsRoots => write!(fmt, "Missing TLS roots"),
-            Self::Io(err) => write!(fmt, "I/O error: {}", err),
-            Self::Http(err) => write!(fmt, "HTTP error: {}", err),
-            Self::HttpInvalidUri(err) => write!(fmt, "HTTP invalid URI: {}", err),
-            Self::HttpInvalidUriParts(err) => write!(fmt, "HTTP invalid URI parts: {}", err),
-            Self::HttpHeaderInvalidValue(err) => write!(fmt, "HTTP header invalid value: {}", err),
-            Self::HttpHeaderToStr(err) => write!(fmt, "HTTP header to string: {}", err),
-            Self::Httparse(err) => write!(fmt, "HTTP parser error: {}", err),
+            Self::Io(err) => write!(fmt, "I/O error: {err}"),
+            Self::Http(err) => write!(fmt, "HTTP error: {err}"),
+            Self::HttpInvalidUri(err) => write!(fmt, "HTTP invalid URI: {err}"),
+            Self::HttpInvalidUriParts(err) => write!(fmt, "HTTP invalid URI parts: {err}"),
+            Self::HttpHeaderInvalidValue(err) => write!(fmt, "HTTP header invalid value: {err}"),
+            Self::HttpHeaderToStr(err) => write!(fmt, "HTTP header to string: {err}"),
+            Self::Httparse(err) => write!(fmt, "HTTP parser error: {err}"),
             #[cfg(feature = "native-tls")]
-            Self::NativeTls(err) => write!(fmt, "TLS error: {}", err),
+            Self::NativeTls(err) => write!(fmt, "TLS error: {err}"),
             #[cfg(feature = "rustls")]
-            Self::Tls(err) => write!(fmt, "TLS error: {}", err),
+            Self::Tls(err) => write!(fmt, "TLS error: {err}"),
             #[cfg(feature = "rustls")]
-            Self::InvalidServerName(name) => write!(fmt, "Invalid server name: {}", name),
+            Self::InvalidServerName(name) => write!(fmt, "Invalid server name: {name}"),
             #[cfg(feature = "json")]
-            Self::Json(err) => write!(fmt, "JSON error: {}", err),
+            Self::Json(err) => write!(fmt, "JSON error: {err}"),
         }
     }
 }

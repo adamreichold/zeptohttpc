@@ -34,14 +34,14 @@ fn fails_due_to_timeout() {
     let mut opts = Options::default();
     opts.deadline = Some(Instant::now() + Duration::from_millis(100));
 
-    let res = Request::get(format!("http://localhost:{}", port))
+    let res = Request::get(format!("http://localhost:{port}"))
         .empty()
         .unwrap()
         .send_with_opts(opts);
 
     match res {
         Err(Error::Io(err)) => assert_eq!(ErrorKind::TimedOut, err.kind()),
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
         Ok(resp) => panic!("Unexpected response: {}", resp.status()),
     }
 

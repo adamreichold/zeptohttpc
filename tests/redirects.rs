@@ -82,7 +82,7 @@ fn fails_due_to_too_many_redirects() {
 
     match res {
         Err(Error::TooManyRedirects) => (),
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
         Ok(resp) => panic!("Unexpected response: {}", resp.status()),
     }
 }
@@ -97,7 +97,7 @@ fn location_is_recommended_but_not_required() {
 
     match res {
         Ok(resp) => assert_eq!(resp.status().as_u16(), 301),
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 
@@ -115,7 +115,7 @@ impl MockServer {
             let port = port.to_string();
 
             for resp in resps {
-                let resp = resp.replace("{uri}", &format!("http://localhost:{}", port));
+                let resp = resp.replace("{uri}", &format!("http://localhost:{port}"));
 
                 let (mut stream, _peer_addr) = listener.accept().unwrap();
 
