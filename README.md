@@ -1,3 +1,7 @@
+This repository was moved to <https://codeberg.org/adamreichold/zeptohttpc>.
+
+---
+
 # zeptohttpc
 
 [![crates.io](https://img.shields.io/crates/v/zeptohttpc.svg)](https://crates.io/crates/zeptohttpc)
